@@ -8,7 +8,7 @@ Memoria viva: decisiones, riesgos y aprendizajes que deben sobrevivir entre sesi
 - Backend Express en `paz-y-salvo-backend/` (capas routes → controllers → services → repositories, DTOs Zod, middlewares de auth/RBAC/ámbito de área).
 - Frontend React + Vite + Tailwind v3 en `paz-y-salvo-frontend/` (páginas por rol en `src/pages/`).
 - DDL y seeds en `database/`; propuestas de cambio en `database/PROPUESTAS_CAMBIO_BD.md`.
-- Modo demo en memoria (`demoStore.js`) habilitado por defecto en local.
+- Backend 100 % sobre Supabase (sin `demoStore`); tests de integración con PGlite (`npm test`).
 
 ## Decisiones tomadas
 
@@ -20,7 +20,7 @@ Memoria viva: decisiones, riesgos y aprendizajes que deben sobrevivir entre sesi
 
 - Token JWT en `localStorage` (`pys_token`) — expuesto ante XSS — evaluar cookie httpOnly (PYS-T03).
 - Backend sin `helmet` ni rate limiting en login — superficie de ataque — PYS-T03.
-- `DEMO_MODE`/`DEMO_AUTH_ENABLED` deben quedar en `false` en producción (TODO-PROD-01).
+- `seed_demo.sql` y el panel de cuentas de prueba no deben llegar a producción (TODO-PROD-01).
 - RLS de Supabase aún no habilitado (TODO-RLS-01).
 - Proyecto Supabase gratuito se pausa tras 7 días sin uso.
 

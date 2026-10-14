@@ -12,8 +12,8 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 - Toda variable nueva se documenta en `.env.example` con un valor vacío o de ejemplo.
 - **Regla crítica:** las variables públicas del cliente (`VITE_*`, `NEXT_PUBLIC_*`, `EXPO_PUBLIC_*`, o las que van dentro de la app móvil) las puede leer cualquiera. Las claves de APIs de pago o privilegiadas van en un backend/función serverless.
 - Backend (`.env`): `DB_*`, `JWT_SECRET` (≥ 32 bytes), `GOOGLE_CLIENT_ID`, `CORS_ORIGINS`, `DEMO_*`. Nunca exponerlas al frontend.
-- Frontend: solo `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID` (público por diseño) y `VITE_ENABLE_DEMO_LOGIN`.
-- `DEMO_MODE`, `DEMO_AUTH_ENABLED` y `DEMO_LOGIN_*` deben estar en `false`/vacíos en producción.
+- Frontend: solo `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID` (público por diseño) y `VITE_ENABLE_TEST_ACCOUNTS` (panel de cuentas ficticias, solo desarrollo).
+- En producción `VITE_ENABLE_TEST_ACCOUNTS` debe ser `false` y la base no debe incluir `seed_demo.sql`.
 
 ## Validación de inputs
 

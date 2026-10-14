@@ -84,7 +84,7 @@ Reglas de negocio (detalle en `README.md` y `guia-tecnica.txt`):
 - **RN-010** Informe de entrega de cargo (8 secciones) requerido para aprobar.
 - **RN-011** Admin DTI solo edita el nombre del cargo.
 
-Modos: `DEMO_MODE=true` funciona en memoria (`src/data/demoStore.js`); `false` persiste en Supabase.
+Todo se persiste en Supabase (no hay modo demo). Las reglas RN las valida el backend y las hace cumplir la BD (triggers/CHECK); cada escritura queda en `auditoria`.
 
 ## Identidad visual
 

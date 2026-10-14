@@ -17,5 +17,5 @@ Sistema web del paz y salvo de retiro (formato GTH-07) de la Corporación Univer
 ## Reglas duras
 
 - Las reglas de negocio viven en `src/services/` del backend y cada una tiene test.
-- No activar `DEMO_MODE` / `DEMO_AUTH_ENABLED` en producción; nunca subir `.env`.
+- Todo dato vive en Supabase (no hay modo demo). `seed_demo.sql` solo en desarrollo; nunca subir `.env`.
 - Los tokens de color vienen del Figma aprobado por el cliente (`tailwind.config.js`).

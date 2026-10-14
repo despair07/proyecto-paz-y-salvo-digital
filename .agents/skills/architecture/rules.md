@@ -17,11 +17,10 @@ paz y salvo/
 │   ├── src/routes/           definición de endpoints (/api/v1)
 │   ├── src/controllers/      HTTP: leer request, responder
 │   ├── src/services/         reglas de negocio (RN-001…RN-011), PDF, certificados
-│   ├── src/repositories/     acceso a datos (pg / demoStore)
+│   ├── src/repositories/     único lugar con SQL (pg → Supabase)
 │   ├── src/dtos/             validación Zod y mapeo de entrada/salida
 │   ├── src/middlewares/      auth JWT, RBAC, ámbito por dependencia, errores
 │   ├── src/config/           env, base de datos, credenciales demo
-│   ├── src/data/             demoStore en memoria (DEMO_MODE)
 │   └── tests/                Jest + Supertest
 └── paz-y-salvo-frontend/src/
     ├── pages/                una carpeta por rol (user, area-manager, approver, admin, auth, certificates)
@@ -36,7 +35,7 @@ Flujo backend: `route → middlewares (auth, rbac, areaScope) → controller →
 ## Datos y servicios
 
 - Frontend → `src/services/api.js` (axios con `VITE_API_URL`, agrega el JWT) → API REST `/api/v1`.
-- Backend → `repositories/` es el único lugar con SQL; con `DEMO_MODE=true` usan `demoStore` en memoria, con `false` Supabase PostgreSQL.
+- Backend → `repositories/` es el único lugar con SQL; ejecutan consultas parametrizadas contra Supabase PostgreSQL (`database.withClient` para lecturas, `database.withUserContext` para escrituras auditadas).
 - Errores con `utils/httpError.js` y `errorHandler.middleware.js`; el frontend muestra estados vacío/cargando/error en cada dashboard.
 
 ## Seguridad

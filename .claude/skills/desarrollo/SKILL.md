@@ -52,7 +52,8 @@ Ver árbol completo en `architecture/rules.md`.
 - No guardar secretos en el repositorio.
 - No aprobar ni emitir certificado sin pasar por las validaciones RN-005, RN-006 y RN-010.
 - No consultar la BD fuera de `repositories/`.
-- No activar `DEMO_MODE` ni `DEMO_AUTH_ENABLED` en producción.
+- No reintroducir datos en memoria ni modos demo: todo se lee y escribe en PostgreSQL.
+- No cargar `database/seed_demo.sql` en producción.
 
 ## Criterio de commits
 

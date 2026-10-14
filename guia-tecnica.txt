@@ -1,0 +1,174 @@
+ESPECIFICACIÓN TÉCNICA COMPLETA, GUÍA DE ARQUITECTURA Y SYSTEM PROMPT MAESTRO
+Sistema Digital de Paz y Salvo Uniautónoma (Paz & Salvo Digital)
+Corporación Universitaria Autónoma del Cauca | Hito de Práctica Profesional 2026
+
+1. Información General y Marco Metodológico
+El proyecto Paz & Salvo Digital Uniautónoma es una solución web orientada a servicios diseñada para sustituir el trámite físico de entrega de cargo y paz y salvo laboral (formato GTH-07) por un flujo totalmente digital, auditable y centralizado en la Corporación Universitaria Autónoma del Cauca.
+Proyecto / Aplicación:	Paz & Salvo Digital Uniautónoma (Web Responsive)
+Integrantes del Equipo:	Duván Felipe David Jaramillo (Liderazgo Técnico) & Daniel Francisco Reina Medina (Liderazgo de Calidad)
+Cliente Institucional:	División de Bienestar Universitario, DTI y Comunidad Universitaria (Olga Lucía Londoño Luna)
+Repositorio GitHub:	https://github.com/despair07/proyecto-paz-y-salvo-digital.git
+Cronograma Ejecución:	28 de Septiembre de 2026 – 15 de Noviembre de 2026 (7 semanas / 3 Sprints)
+
+2. Reglas de Negocio Institucionales (RN-001 a RN-007) y Roles RBAC
+• RN-001 (Estado Global Al Día): El estado general de la solicitud del usuario pasa a 'AL_DIA' única y exclusivamente cuando el conteo de bloqueos activos registrados en todas las dependencias evaluadoras sea igual a cero.
+• RN-002 (Exclusividad de Aprobación Final): La facultad de otorgar la aprobación final y habilitar la expedición del paz y salvo digital reside única y exclusivamente en la División de Comunidad Universitaria.
+• RN-003 (Categorías Obligatorias de Bloqueo): Todo bloqueo o pendiente registrado por una dependencia debe clasificarse obligatoriamente en una de las cuatro categorías: 'FINANCIERO', 'INVENTARIO_ELEMENTOS', 'DOCUMENTAL_ENTREGABLES', o 'ACADEMICO_PROFESORAL'.
+• RN-004 (Aislamiento de Ámbito por Dependencia): Cada encargado de área solo tiene permisos para visualizar, crear, editar o levantar bloqueos correspondientes a su propia dependencia asignada.
+• RN-005 (Restricción de Aprobación por Bloqueo Activo): El sistema deshabilita e impide cualquier intento de aprobación final si el usuario registra al menos un bloqueo en estado 'BLOQUEADO'.
+• RN-006 (Generación de Certificado Digital): El certificado en PDF con código QR solo se genera y habilita para descarga cuando la solicitud cuenta con la aprobación final formal registrada por Comunidad Universitaria.
+• RN-007 (Validación de Paz y Salvo Profesoral): Para usuarios con vinculación tipo 'Docente', el Centro de Desarrollo Profesoral debe validar e ingresar de forma independiente los tres ítems obligatorios: planes de aula, innovaciones educativas e informes de ejecución.
+
+3. Estructura Exacta del Formato Físico GTH-07 (Paz y Salvo de Retiro)
+El sistema digital automatiza punto por punto la estructura del formato GTH-07 (Paz y Salvo de Retiro / Entrega de Cargo - Versión 2) de la Corporación Universitaria Autónoma del Cauca, el cual se compone de dos páginas oficiales:
+3.1 Página 1: Datos Generales y Dependencias Administrativas
+1. Encabezado e Información del Trabajador: Nombres y apellidos completos, cédula de ciudadanía (con lugar de expedición), cargo desempeñado, tipo de novedad ('Retiro' o 'Cambio de dependencia') y fecha exacta de retiro (Día / Mes / Año).
+2. Paz y Salvo del Jefe Inmediato: Verificación de entrega de archivos físicos, digitales o magnéticos, informe de gestión y productos elaborados por el trabajador o contratista (Firma del jefe de área y fecha).
+3. Paz y Salvo Áreas de Gestión Evaluadoras (8 Dependencias):
+Dependencia Evaluadora	Aspectos Específicos Verificados	Firma / Validado
+1. Jefe Inmediato	Informe por entrega de cargo, entrega de archivos físicos/digitales y proyectos en curso.	Firma Digital
+2. Tecnologías de la Información (DTI)	Devolución de equipos de cómputo, accesos a sistemas, licencias y correo institucional.	Firma Digital
+3. Medios Educativos	Devolución de material bibliográfico, equipos audiovisuales y recursos de laboratorio.	Firma Digital
+4. Almacén	Devolución de elementos de inventario físico, herramientas y activos fijos asignados.	Firma Digital
+5. Archivo y Correspondencia	Entrega de libros de archivo, expedientes documentales e inventario de correspondencia.	Firma Digital
+6. División Contable y Financiera	Verificación de saldos deudores, préstamos, anticipos pendientes de descuento o cuentas por pagar.	Firma Digital
+7. Seguridad y Salud en el Trabajo (SST)	Realización y radicación del examen médico obligatorio de retiro.	Firma Digital
+8. División de Comunidad Universitaria	Aprobación institucional final y cierre definitivo del trámite.	Firma Aprobador Final
+
+3.2 Página 2: Paz y Salvo a Profesores y Cláusula Legal
+1. Centro de Desarrollo Profesoral (Aplica exclusivamente a cargo 'Docente'):
+   • Innovaciones Educativas: Sistematización del proceso en el formato correspondiente (1.ª y 2.ª convocatoria finalizadas).
+   • Planes de Aula: Diligenciamiento completo y carga en la matriz institucional (incluye bibliografía, propósitos, etc.).
+   • Informes de Ejecución: Reporte cuantitativo con evidencias sobre actividades asignadas (tutorías, RA, Saber Pro, VRA).
+
+2. Cláusula Legal de Confidencialidad e Integridad Institucional:
+El trabajador o contratista firmante se compromete expresamente a guardar reserva absoluta sobre la información no pública de la Universidad, respetar la propiedad intelectual desarrollada y abstenerse de realizar conductas que atenten contra el buen nombre o reputación institucional de Uniautónoma.
+
+4. Estructura Exacta del Informe por Entrega de Cargo
+El Informe por Entrega de Cargo es el documento técnico-administrativo que todo servidor saliente debe diligenciar y entregar a su Jefe Inmediato. El sistema digital respalda el cumplimiento de sus 8 secciones clave:
+• Sección I: Datos Generales: Nombre del colaborador, tipo y número de documento, cargo que entrega, dependencia, nombre del superior inmediato y periodo de cobertura (fechas exactas de inicio y terminación).
+• Sección II: Informe de Gestión: 1) Cumplimiento de propósitos del cargo (Objetivo, Estado, Descripción). 2) Proyectos y actividades en curso (Proyecto, Acciones concluidas, Acciones pendientes). 3) Contactos externos relevantes (Nombre, Institución, Datos de contacto, Razones para contactar).
+• Sección III & IV: Procedimientos y Formatos: Relación detallada de procesos, procedimientos, manuales, instructivos y formatos utilizados o creados/documentados durante la gestión.
+• Sección V: Relación de Informes: Listado de informes presentados a instancias internas/externas, periodicidad, fecha de entrega y papel desempeñado (elaboración, compilación, envío).
+• Sección VI: Estado de los Recursos a Cargo: • Infraestructura: Espacio físico y estado a la entrega.
+• Muebles, enseres y dotación: Cantidad, detalle y estado.
+• Equipos de cómputo y tecnología: Estado funcional.
+• Archivos y documentos físicos/memorias portables: CD, USB, discos extraíbles con ubicación física.
+• Archivos digitales en equipos: Nombre del archivo y ruta exacta.
+• Software y credenciales: Sistemas de información y cuentas de correo institucionales administradas.
+• Información SNIES y recursos especiales.
+• Sección VII & VIII: Anexos y Verificación: Relación de anexos físicos/digitales, datos de contacto personal del servidor saliente (correo personal, celular, dirección) y procedimiento de verificación in situ por TICS e Infraestructura.
+
+5. Sistema de Diseño Visual UI/UX, Tokens de Color y Clases Tailwind/CSS
+La interfaz gráfica del cliente web React adopta la paleta cromática e identidad visual de Uniautónoma con tipografía Montserrat (en negrita y mayúsculas para navegación y títulos):
+Nombre del Token	Código Hex	Uso y Aplicación en la Interfaz
+uni-noche	#050C2C	Fondo general de la página (background oscuro)
+uni-marino	#0B1A4A	Botones oscuros y títulos sobre tarjetas o contenedores claros
+uni-azul	#1D4ED8	Fragmentos del fondo y triángulo decorativo de esquina en la cabecera
+uni-rey	#2F6BFF	Brillos y fragmentos más claros del fondo decorativo
+uni-cian	#29C5E6	Etiquetas ('MÓDULO ACTIVO', 'MUY PRONTO'), texto 'BU' del título y flechas
+uni-amarillo	#FFC20E	Inicio del degradado de tarjetas, botones y pestañas principales
+uni-ambar	#F9A11B	Punto medio del degradado institucional
+uni-naranja	#EE7D00	Final del degradado y sombra de acento warmth
+uni-mandarina	#F7931E	Acentos naranjas: '→ Salir', primer enlace de inicio y botón del asistente
+Texto Principal	#F1F5FF	Texto blanco de alta legibilidad sobre fondo oscuro
+Texto Secundario	#C3CDE6 / #8F9CC6	Subtítulos, etiquetas secundarias y textos de apoyo sobre fondo oscuro
+
+5.1 Degradado de la Banda de Módulos (6 Tramos)
+La banda principal de módulos se renderiza en un degradado continuo de izquierda a derecha (una tarjeta por tramo):
+  [Tramo 1: #FFC20E] ➔ [Tramo 2: #FDB515] ➔ [Tramo 3: #F9A11B] ➔ [Tramo 4: #F59312] ➔ [Tramo 5: #F18607] ➔ [Tramo 6: #EE7D00]
+
+Atajos CSS Combinados en el Código:
+• banda-uni: Aplica el degradado continuo amarillo ➔ naranja (`background: linear-gradient(90deg, #FFC20E 0%, #F9A11B 50%, #EE7D00 100%)`) a botones y pestañas activas.
+• sombra-uni: Aplica una sombra cálida naranja de elevación (`box-shadow: 0 4px 14px 0 rgba(238, 125, 0, 0.39)`).
+
+
+6. Arquitectura de Software y Modelo de Base de Datos PostgreSQL (3FN)
+El backend se organiza bajo el patrón Service-Repository / MVC por capas con persistencia en PostgreSQL 15+ (Supabase). Las 10 tablas del modelo relacional garantizan Tercera Forma Normal (3FN):
+• 1. usuarios: id (UUID, PK), nombres, apellidos, tipo_documento, numero_documento (UQ), correo_institucional (UQ, @uniautonoma.edu.co), tipo_vinculacion ('Docente'|'Administrativo'|'Contratista'), estado ('ACTIVO'|'INACTIVO'), fecha_creacion.
+• 2. roles: id (SERIAL, PK), nombre_rol ('Docente', 'Administrativo', 'Contratista', 'Jefe Inmediato', 'Encargado de Área', 'Aprobador Comunidad Universitaria', 'Administrador DTI'), descripcion.
+• 3. usuario_roles: usuario_id (FK), rol_id (FK), fecha_asignacion (PK compuesta).
+• 4. dependencias: id (UUID, PK), nombre_dependencia (UQ), descripcion, es_aprobadora_final (BOOL).
+• 5. encargados_dependencia: id (UUID, PK), usuario_id (FK), dependencia_id (FK), fecha_asignacion.
+• 6. periodos_academicos: id (UUID, PK), nombre_periodo, fecha_inicio, fecha_fin, estado_activo (BOOL).
+• 7. solicitudes_paz_y_salvo: id (UUID, PK), usuario_id (FK), periodo_academico_id (FK), fecha_solicitud, estado_global ('EN_PROCESO'|'AL_DIA'|'APROBADO_FINAL'|'RECHAZADO'), aprobador_final_id (FK), fecha_aprobacion_final, observaciones_aprobacion.
+• 8. bloqueos_dependencia: id (UUID, PK), solicitud_id (FK), dependencia_id (FK), registrado_por_id (FK), categoria ('FINANCIERO'|'INVENTARIO_ELEMENTOS'|'DOCUMENTAL_ENTREGABLES'|'ACADEMICO_PROFESORAL'), motivo_descripcion, estado ('BLOQUEADO'|'RESUELTO'), fecha_registro, resuelto_por_id (FK), fecha_resolucion, observacion_resolucion.
+• 9. entregables_profesorales: id (UUID, PK), solicitud_id (FK, UQ), planes_aula_aprobado (BOOL), innovaciones_educativas_aprobado (BOOL), informes_ejecucion_aprobado (BOOL), evaluador_id (FK), fecha_evaluacion, observaciones.
+• 10. certificados_digitales: id (UUID, PK), solicitud_id (FK, UQ), codigo_qr_token (UQ), hash_verificacion, url_pdf_storage, fecha_emision.
+
+7. Catálogo Completo de Endpoints REST API (/api/v1/)
+Método	Endpoint REST	Descripción de la Operación	Rol Exigido (RBAC)
+POST	/auth/login	Inicia sesión validando token Google SSO (@uniautonoma.edu.co)	Público
+GET	/auth/me	Obtiene perfil de usuario, roles y permisos de la sesión activa	JWT Genérico
+GET	/paz-y-salvo/mi-estado	Consulta estado global ('AL_DIA' / 'EN_PROCESO') y detalle de las 8 áreas	JWT Genérico
+GET	/bloqueos	Lista bloqueos registrados (filtra por ?dependencia=...&estado=...)	Encargado / Admin
+GET	/bloqueos/{id}	Obtiene el detalle completo de un bloqueo por ID	JWT Genérico
+POST	/bloqueos	Registra un nuevo bloqueo asociando categoría y motivo	Encargado de Área
+PUT	/bloqueos/{id}	Cambia estado a 'RESUELTO' o edita observación de pendiente	Encargado de Área
+DELETE	/bloqueos/{id}	Elimina o anula un bloqueo registrado por error	Encargado / Admin
+PUT	/desarrollo-profesoral/docentes/{id}	Evalúa e ingresa los 3 booleanos de entregables docentes	Desarrollo Profesoral
+GET	/tramites/pendientes-aprobacion	Lista solicitudes con 0 bloqueos activas listas para revisión final	Comunidad Universitaria
+POST	/tramites/{id}/aprobar	Registra la Aprobación Final o el rechazo motivado del trámite	Comunidad Universitaria
+POST	/certificados	Genera el certificado PDF con código QR y lo almacena en Supabase	Aprobador / Sistema
+GET	/certificados/verificar/{token}	Endpoint público que valida autenticidad del PDF por escaneo QR	Público
+GET	/dependencias	Retorna catálogo de las 8 dependencias evaluadoras	JWT Genérico
+POST	/dependencias	Crea o actualiza dependencias registradas	Administrador DTI
+GET	/usuarios	Busca usuarios por número de cédula o correo institucional	Encargado / Admin
+PUT	/usuarios/{id}	Actualiza roles o asigna encargados a dependencias	Administrador DTI
+
+8. System Prompt Maestro Super Explícito para Generación con IA
+Copia y pega el siguiente prompt consolidado en cualquier modelo de Inteligencia Artificial (ChatGPT, Claude, DeepSeek) para generar el código ejecutable completo del proyecto:
+Actúa como un Arquitecto de Software y Desarrollador Full-Stack Senior experto en Node.js, Express, React, Tailwind CSS y PostgreSQL / Supabase. Construye el código completo para el proyecto "Paz & Salvo Digital Uniautónoma".
+
+---
+1. CONTEXTO, REGLAS Y DOMINIO:
+- Automatiza el formato GTH-07 de Paz y Salvo de Retiro y respalda la entrega del Informe de Cargo de Uniautónoma.
+- Autenticación exclusiva para correos @uniautonoma.edu.co vía Google Workspace SSO (OAuth 2.0) emitiendo tokens JWT.
+- RBAC con 4 roles: Docente/Administrativo/Contratista (solicitante), Encargado de Área/Jefe Inmediato, Aprobador (Comunidad Universitaria) y Administrador DTI.
+- 8 Dependencias Evaluadoras: Jefe Inmediato, DTI, Medios Educativos, Almacén, Archivo y Correspondencia, División Contable y Financiera, Seguridad y Salud en el Trabajo (SST), y Centro de Desarrollo Profesoral.
+- RN-001: Estado general pasa a 'AL_DIA' solo cuando los bloqueos activos en las 8 áreas sean exactamente 0.
+- RN-002 / RN-005: Aprobación final e impresión del certificado PDF con QR restringida a Comunidad Universitaria.
+- RN-003: Todo bloqueo debe pertenecer a una de las 4 categorías: 'FINANCIERO', 'INVENTARIO_ELEMENTOS', 'DOCUMENTAL_ENTREGABLES', o 'ACADEMICO_PROFESORAL'.
+- RN-007: Docentes requieren la validación independiente de 3 booleanos en Desarrollo Profesoral (planes_aula, innovaciones_educativas, informes_ejecucion).
+
+---
+2. DESIGN SYSTEM & IDENTIDAD VISUAL (TAILWIND CSS):
+- Colores Hex:
+  * uni-noche: #050C2C (background general de la página)
+  * uni-marino: #0B1A4A (botones oscuros y títulos sobre tarjetas)
+  * uni-azul: #1D4ED8 (fragmentos de fondo y triángulos decorativos de cabecera)
+  * uni-rey: #2F6BFF (brillos de fondo)
+  * uni-cian: #29C5E6 (etiquetas "MÓDULO ACTIVO", "MUY PRONTO", "BU" y flechas)
+  * uni-amarillo: #FFC20E, uni-ambar: #F9A11B, uni-naranja: #EE7D00 (degradado principal)
+  * uni-mandarina: #F7931E (acentos de salida y asistente)
+  * Texto: blanco #F1F5FF sobre oscuro. Texto secundario: #C3CDE6 / #8F9CC6.
+- Tipografía: Montserrat, en negrita y mayúsculas para títulos y navegación.
+- Clases CSS clave:
+  * .banda-uni { background: linear-gradient(90deg, #FFC20E 0%, #F9A11B 50%, #EE7D00 100%); }
+  * .sombra-uni { box-shadow: 0 4px 14px 0 rgba(238, 125, 0, 0.39); }
+  * Banda de módulos con degradado continuo por tramos (#FFC20E -> #FDB515 -> #F9A11B -> #F59312 -> #F18607 -> #EE7D00).
+
+---
+3. BASE DE DATOS POSTGRESQL (3FN EN SUPABASE):
+Genera el script DDL con las 10 tablas: usuarios, roles, usuario_roles, dependencias, encargados_dependencia, periodos_academicos, solicitudes_paz_y_salvo, bloqueos_dependencia, entregables_profesorales y certificados_digitales. Incluye UUIDs, claves foráneas y restricciones CHECK.
+
+---
+4. BACKEND API REST (NODE.JS + EXPRESS):
+Estructura por capas Service-Repository / MVC. Genera los endpoints:
+- POST /api/v1/auth/login, GET /api/v1/auth/me, GET /api/v1/paz-y-salvo/mi-estado
+- GET /api/v1/bloqueos, POST /api/v1/bloqueos, PUT /api/v1/bloqueos/:id, DELETE /api/v1/bloqueos/:id
+- PUT /api/v1/desarrollo-profesoral/docentes/:id
+- GET /api/v1/tramites/pendientes-aprobacion, POST /api/v1/tramites/:id/aprobar
+- POST /api/v1/certificados, GET /api/v1/certificados/verificar/:token (público)
+- Servicio de PDF con pdf-lib y qrcode para generación dinámica del certificado con código QR.
+
+---
+5. FRONTEND WEB (REACT + VITE + TAILWIND CSS):
+Genera las vistas protegidas:
+- /login: Botón SSO Google Workspace con alerta para dominios no institucionales.
+- /dashboard/usuario: Tarjetas de las 8 áreas con banda de degradado, indicador 'AL_DIA' / 'CON_PENDIENTES' y botón de descarga PDF.
+- /dashboard/encargado: Buscador de usuarios, modal para registrar bloqueos con las 4 categorías y modal para marcar 'RESUELTO'.
+- /dashboard/aprobador: Resumen consolidado para Comunidad Universitaria con botón de aprobación final.
+
+Proporciona el código modular, limpio y con manejo de errores.
+
