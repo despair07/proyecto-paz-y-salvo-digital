@@ -1,7 +1,14 @@
 import api from './api.js';
 
-export async function login(correo, password) {
-  const { data } = await api.post('/auth/login', { correo, password });
+// Inicio de sesión con Google Workspace (ID token de Google Identity Services)
+export async function login(googleToken) {
+  const { data } = await api.post('/auth/login', { googleToken });
+  return data;
+}
+
+// Inicio de sesión con correo institucional y contraseña
+export async function loginWithPassword(email, password) {
+  const { data } = await api.post('/auth/login', { email, password });
   return data;
 }
 

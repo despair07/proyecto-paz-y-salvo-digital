@@ -1,11 +1,35 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
-import { login as loginRequest, me } from '../services/auth.service.js';
+import { loginWithPassword as loginWithPasswordRequest, login as loginRequest, me } from '../services/auth.service.js';
 
 export const AuthContext = createContext(null);
 
+function getRolesFromUser(user) {
+  return user?.roles?.map((role) => (
+    typeof role === 'string' ? role : role.nombre_rol
+  )) ?? [];
+}
+
+function getHomeForUser(user) {
+  const roles = getRolesFromUser(user);
+
+  if (roles.includes('Administrador DTI')) {
+    return '/dashboard/admin';
+  }
+  if (roles.some((role) => ['Encargado de Área', 'Jefe Inmediato'].includes(role))) {
+    return '/dashboard/encargado';
+  }
+  if (roles.includes('Aprobador Comunidad Universitaria')) {
+    return '/dashboard/aprobador';
+  }
+  if (roles.some((role) => ['Docente', 'Administrativo', 'Contratista'].includes(role))) {
+    return '/dashboard/usuario';
+  }
+  return '/login';
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [home, setHome] = useState('/app');
+  const [home, setHome] = useState('/login');
   const [loading, setLoading] = useState(true);
 
   const hydrate = useCallback(async () => {
@@ -16,11 +40,13 @@ export function AuthProvider({ children }) {
     }
     try {
       const data = await me();
-      setUser(data.user);
-      setHome(data.home);
+      const nextUser = data.usuario;
+      setUser(nextUser);
+      setHome(getHomeForUser(nextUser));
     } catch {
       localStorage.removeItem('pys_token');
       setUser(null);
+      setHome('/login');
     } finally {
       setLoading(false);
     }
@@ -30,23 +56,45 @@ export function AuthProvider({ children }) {
     hydrate();
   }, [hydrate]);
 
-  const login = async (correo, password) => {
-    const data = await loginRequest(correo, password);
-    localStorage.setItem('pys_token', data.token);
-    setUser(data.user);
-    setHome(data.home);
-    return data;
-  };
+  const setSession = useCallback((nextUser, token) => {
+    if (token) {
+      localStorage.setItem('pys_token', token);
+    }
+    setUser(nextUser);
+    const userHome = getHomeForUser(nextUser);
+    setHome(userHome);
+    return userHome;
+  }, []);
 
-  const logout = () => {
+  const login = useCallback(async (googleToken) => {
+    const data = await loginRequest(googleToken);
+    const userHome = setSession(data.usuario, data.token);
+    return { ...data, home: userHome };
+  }, [setSession]);
+
+  const loginWithPassword = useCallback(async (email, password) => {
+    const data = await loginWithPasswordRequest(email, password);
+    const userHome = setSession(data.usuario, data.token);
+    return { ...data, home: userHome };
+  }, [setSession]);
+
+  const logout = useCallback(() => {
     localStorage.removeItem('pys_token');
     setUser(null);
-    setHome('/app');
-  };
+    setHome('/login');
+  }, []);
 
   const value = useMemo(
-    () => ({ user, home, loading, login, logout, hasRole: (roles) => user?.roles?.some((r) => roles.includes(r)) }),
-    [user, home, loading]
+    () => ({
+      user,
+      home,
+      loading,
+      login,
+      loginWithPassword,
+      logout,
+      hasRole: (roles) => getRolesFromUser(user).some((role) => roles.includes(role)),
+    }),
+    [user, home, loading, login, loginWithPassword, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
