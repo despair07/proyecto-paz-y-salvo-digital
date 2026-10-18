@@ -16,7 +16,7 @@ const net = require('node:net');
 const path = require('node:path');
 
 const IS_WIN = process.platform === 'win32';
-const EXIT_PORT_IN_USE = 2;
+const EXIT_PORT_IN_USE = 98;
 
 const SERVICES = [
   {

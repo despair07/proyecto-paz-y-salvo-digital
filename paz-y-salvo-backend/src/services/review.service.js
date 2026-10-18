@@ -101,14 +101,14 @@ class ReviewService {
     };
   }
 
-  // Detalle de una solicitud para decidir: datos del trabajador, informe (solo lectura) y entregables
+  // Detalle de una solicitud para decidir: datos del trabajador y entregables. El informe por entrega
+  // de cargo NO se muestra aquí: solo lo ve Comunidad Universitaria en la aprobación final.
   async getDetail(currentUser, id) {
     return database.withClient(async (client) => {
       const r = await this.loadRevision(client, id);
       await this.assertReviewer(client, currentUser, r);
 
-      const [informe, entregables, historial, firma] = await Promise.all([
-        requestRepository.findInforme(client, r.solicitud_id),
+      const [entregables, historial, firma] = await Promise.all([
         r.solo_docentes ? requestRepository.findEntregables(client, r.solicitud_id) : null,
         requestRepository.listBloqueosDeDependencia(client, r.solicitud_id, r.dependencia_id),
         userRepository.getFirma(client, currentUser.id),
@@ -125,8 +125,7 @@ class ReviewService {
         recibi: r.recibi,
         categoriaBloqueo: r.categoria_bloqueo,
         estadoSolicitud: r.estado_global,
-        trabajadorDetalle: { lugarExpedicion: r.lugar_expedicion_documento, informeCompleto: r.informe_entrega_cargo },
-        informe: informe ? { estado: informe.estado, secciones: informe.secciones } : null,
+        trabajadorDetalle: { lugarExpedicion: r.lugar_expedicion_documento },
         entregables,
         historial,
         tieneFirma: Boolean(firma),

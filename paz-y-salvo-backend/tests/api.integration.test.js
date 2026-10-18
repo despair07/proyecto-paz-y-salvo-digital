@@ -261,10 +261,15 @@ describe('Solicitar la aprobación de cada dependencia', () => {
     expect((await post('valentina', `${base}/${DEP.sst}/solicitar`, { enlace: 'javascript:alert(1)' })).status).toBe(400);
   });
 
-  it('el paz y salvo del jefe exige el informe completo primero (RN-010)', async () => {
-    const res = await post('valentina', `${base}/${DEP.jefe}/solicitar`);
+  it('el paz y salvo del jefe no depende del informe: se pide en paralelo', async () => {
+    expect((await post('valentina', `${base}/${DEP.jefe}/solicitar`)).status).toBe(201);
+  });
+
+  it('el cierre y la firma no se habilitan hasta que las dependencias aprueben y el informe esté completo', async () => {
+    const res = await put('valentina', `/tramites/${SOLICITUD.valentina}/cierre`, { observaciones: 'muy pronto' });
     expect(res.status).toBe(409);
-    expect(res.body.mensaje).toMatch(/informe/);
+    expect(res.body.mensaje).toMatch(/cierre/i);
+    expect((await status('valentina')).cierre.habilitado).toBe(false);
   });
 
   it('solicita varias dependencias en paralelo y el trámite pasa a EN_PROCESO', async () => {
@@ -312,20 +317,19 @@ describe('Informe por entrega de cargo (RF-010)', () => {
     expect((await put('valentina', url, { estado: 'TERMINADO', secciones: {} })).status).toBe(400);
   });
 
-  it('solo el dueño lo diligencia; el dueño y los revisores asignados lo leen', async () => {
+  it('solo el dueño lo diligencia; las dependencias y el jefe no lo ven', async () => {
     expect((await put('laura', url, { estado: 'BORRADOR', secciones: {} })).status).toBe(403);
     expect((await get('laura', url)).status).toBe(403);
-    expect((await get('almacen', url)).status).toBe(200); // Almacén ya tiene una solicitud de este trámite
-    expect((await get('jefe', url)).status).toBe(403); // el jefe aún no tiene solicitud (pendiente del informe)
+    expect((await get('almacen', url)).status).toBe(403);
+    expect((await get('jefe', url)).status).toBe(403);
+    expect((await get('aprobador', url)).status).toBe(403); // aún no está en aprobación final
   });
 
-  it('completo, se marca el informe y se habilita pedir el paz y salvo del jefe', async () => {
+  it('completo, se marca el informe', async () => {
     const res = await put('valentina', url, { estado: 'COMPLETO', secciones: informeCompleto() });
     expect(res.status).toBe(200);
     expect(res.body.resumen.every((s) => s.completa)).toBe(true);
     expect((await status('valentina')).informeEntregaCargo).toBe(true);
-    expect((await post('valentina', `/tramites/${SOLICITUD.valentina}/dependencias/${DEP.jefe}/solicitar`)).status).toBe(201);
-    expect((await get('jefe', url)).status).toBe(200);
   });
 });
 
@@ -347,7 +351,7 @@ describe('Bandeja de las dependencias (RN-004, RN-011, RN-013)', () => {
     expect((await get('admin', '/revisiones')).status).toBe(403);
   });
 
-  it('el detalle muestra los datos del trabajador, el informe y el historial', async () => {
+  it('el detalle muestra los datos del trabajador y el historial, pero no el informe', async () => {
     const lista = await get('ti', '/revisiones?q=Valentina');
     const id = lista.body.data[0].id;
     const res = await get('ti', `/revisiones/${id}`);
@@ -358,7 +362,7 @@ describe('Bandeja de las dependencias (RN-004, RN-011, RN-013)', () => {
       tieneFirma: true,
       trabajador: { nombre: 'Valentina Isabel Narváez Mosquera', documento: 'CC 1.061.700.115', vinculacion: 'Docente' },
     });
-    expect(res.body.data.informe.estado).toBe('COMPLETO');
+    expect(res.body.data.informe).toBeUndefined(); // el informe solo lo ve la aprobación final
     // otra dependencia no ve esta solicitud
     expect((await get('almacen', `/revisiones/${id}`)).status).toBe(403);
   });

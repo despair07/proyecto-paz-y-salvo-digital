@@ -45,8 +45,8 @@ async function reportDatabaseStatus() {
   }
 }
 
-// Código de salida cuando el puerto está ocupado: el supervisor no reintenta en bucle.
-const EXIT_PORT_IN_USE = 2;
+// Código de salida cuando el puerto está ocupado (no usar 2: nodemon lo toma como error de comando).
+const EXIT_PORT_IN_USE = 98;
 
 let server;
 let shuttingDown = false;

@@ -139,8 +139,6 @@ class RequestService {
           motivoNoPuede = 'Complete los datos generales primero';
         } else if (area.etapa === 1 && !solicitud.jefe_inmediato_id) {
           motivoNoPuede = 'Seleccione su jefe inmediato';
-        } else if (area.etapa === 1 && !informeCompleto) {
-          motivoNoPuede = 'Complete el informe por entrega de cargo primero';
         }
 
         const entregablesProfesorales = area.solo_docentes
@@ -198,6 +196,8 @@ class RequestService {
         }
       }
       if (!informeCompleto) faltantesFinal.push('Completar el informe por entrega de cargo');
+      // El cierre y la firma se hacen al final, cuando las dependencias ya aprobaron y el informe está completo
+      const cierreHabilitado = solicitud.estado_global === 'AL_DIA' && informeCompleto;
       if (!solicitud.clausula_aceptada) faltantesFinal.push('Aceptar la cláusula y firmar');
 
       return {
@@ -245,6 +245,7 @@ class RequestService {
           fechaClausula: solicitud.fecha_clausula,
           firmado: solicitud.tiene_firma_trabajador,
           tieneFirmaEnPerfil: Boolean(firmaPerfil),
+          habilitado: cierreHabilitado,
           editable: editableSolicitud,
         },
         areasLiberadas,
@@ -425,6 +426,9 @@ class RequestService {
       if (!['BORRADOR', 'EN_PROCESO', 'AL_DIA'].includes(solicitud.estado_global)) {
         throw new HttpError(409, 'El trámite ya está en aprobación final o cerrado y no se puede modificar');
       }
+      if (solicitud.estado_global !== 'AL_DIA' || !solicitud.informe_entrega_cargo) {
+        throw new HttpError(409, 'El cierre y la firma se habilitan cuando todas las dependencias aprobaron y el informe está completo');
+      }
 
       if (payload.observaciones !== undefined) {
         const observaciones = texto(payload.observaciones);
@@ -506,7 +510,13 @@ class RequestService {
     return database.withClient(async (client) => {
       const solicitud = await requestRepository.findById(client, solicitudId);
       if (!solicitud) throw new HttpError(404, 'Solicitud no encontrada');
-      await this.assertCanRead(client, solicitud, currentUser);
+      // El informe lo ve solo quien lo diligencia y Comunidad Universitaria en la aprobación final
+      // (ni las dependencias ni el jefe inmediato lo consultan).
+      const esDueno = solicitud.usuario_id === currentUser.id;
+      const esAprobadorFinal = hasRole(currentUser.roles, [ROLES.APROBADOR]) && FINAL_STATES.includes(solicitud.estado_global);
+      if (!esDueno && !esAprobadorFinal) {
+        throw new HttpError(403, 'El informe por entrega de cargo solo lo consulta Comunidad Universitaria en la aprobación final');
+      }
 
       const informe = await requestRepository.findInforme(client, solicitudId);
       const secciones = informe?.secciones || {};
@@ -547,23 +557,6 @@ class RequestService {
       }
 
       const informe = await requestRepository.upsertInforme(client, { solicitudId, estado, secciones });
-
-      // Si el jefe inmediato ya lo había aprobado, se le avisa del cambio
-      const revisionJefe = solicitud.jefe_inmediato_id
-        ? await client.query(
-          `SELECT 1 FROM revisiones_area r JOIN dependencias d ON d.id = r.dependencia_id
-            WHERE r.solicitud_id = $1 AND d.etapa = 1 AND r.estado = 'APROBADA'`,
-          [solicitudId]
-        )
-        : { rows: [] };
-      if (revisionJefe.rows.length) {
-        await notificationService.notify(client, solicitud.jefe_inmediato_id, {
-          tipo: 'INFORME_MODIFICADO',
-          titulo: 'Informe modificado después de tu aprobación',
-          mensaje: `${solicitud.nombre_completo} modificó su informe por entrega de cargo.`,
-          referencia: { solicitudId },
-        });
-      }
 
       return {
         ok: true,
