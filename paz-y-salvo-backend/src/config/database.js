@@ -1,6 +1,10 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 const env = require('./env');
 const HttpError = require('../utils/httpError');
+
+// Las columnas DATE se devuelven como texto «YYYY-MM-DD» (sin convertirlas a Date con zona horaria,
+// que desplazaría el día en el navegador).
+types.setTypeParser(1082, (value) => value);
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

@@ -1,0 +1,10 @@
+{
+  "name": "paz-y-salvo-digital",
+  "private": true,
+  "description": "Paz & Salvo Digital Uniautónoma: scripts de conveniencia para la raíz del repositorio",
+  "scripts": {
+    "dev": "node dev.js",
+    "test": "npm --prefix paz-y-salvo-backend test",
+    "build": "npm --prefix paz-y-salvo-frontend run build"
+  }
+}

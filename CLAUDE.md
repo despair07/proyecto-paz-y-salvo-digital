@@ -10,6 +10,7 @@ Sistema web del paz y salvo de retiro (formato GTH-07) de la Corporación Univer
 
 ## Comandos
 
+- Todo junto (recomendado): `npm run dev` desde la raíz; reinicia solo lo que se caiga. `npm run dev -- --liberar` cierra servidores viejos que ocupen los puertos
 - Backend: `cd paz-y-salvo-backend && npm run dev` (puerto 3000) · `npm test`
 - Frontend: `cd paz-y-salvo-frontend && npm run dev` (puerto 5173) · `npm run build`
 - Lint: no configurado (PYS-T01)

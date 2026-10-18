@@ -58,25 +58,60 @@ const swaggerDocument = {
     },
     '/bloqueos': {
       get: {
-        summary: 'Lista bloqueos registrados con filtros (?dependencia, ?estado, ?categoria, ?q)',
+        summary: 'Historial de bloqueos (consulta) con filtros (?dependencia, ?estado, ?categoria, ?q)',
         responses: { '200': { description: 'Lista paginada de bloqueos' } },
-      },
-      post: {
-        summary: 'Registra un nuevo bloqueo asociando categoría obligatoria y motivo (RN-003, RN-009)',
-        responses: { '201': { description: 'Bloqueo registrado' } },
       },
     },
     '/bloqueos/{id}': {
       get: { summary: 'Detalle de un bloqueo por ID', responses: { '200': { description: 'OK' } } },
-      put: { summary: 'Levanta bloqueo (RESUELTO) o edita observación sin borrar historial (RF-003)', responses: { '200': { description: 'OK' } } },
-      delete: { summary: 'Anula bloqueo registrado por error', responses: { '200': { description: 'OK' } } },
+    },
+    '/revisiones': {
+      get: { summary: 'Bandeja del jefe inmediato y de las dependencias (?estado, ?q)', responses: { '200': { description: 'OK' } } },
+    },
+    '/revisiones/{id}': {
+      get: { summary: 'Detalle de una solicitud: datos del trabajador, informe y entregables', responses: { '200': { description: 'OK' } } },
+    },
+    '/revisiones/{id}/aprobar': {
+      post: { summary: 'Aprueba con el «Recibí» y la firma del revisor (RN-014)', responses: { '200': { description: 'OK' } } },
+    },
+    '/revisiones/{id}/bloquear': {
+      post: { summary: 'Bloquea con categoría y motivo (RN-003, RN-009)', responses: { '200': { description: 'OK' } } },
+    },
+    '/firma': {
+      get: { summary: 'Firma personal guardada', responses: { '200': { description: 'OK' } } },
+      put: { summary: 'Guarda la firma dibujada (PNG)', responses: { '200': { description: 'OK' } } },
+      delete: { summary: 'Elimina la firma', responses: { '200': { description: 'OK' } } },
+    },
+    '/tramites/{id}/datos-generales': {
+      put: { summary: 'Edita los datos generales (solo en borrador)', responses: { '200': { description: 'OK' } } },
+    },
+    '/tramites/{id}/dependencias/{dependenciaId}/solicitar': {
+      post: { summary: 'Solicita la aprobación de una dependencia (RN-015: enlace para SST)', responses: { '201': { description: 'OK' } } },
+    },
+    '/tramites/{id}/cierre': {
+      put: { summary: 'Observaciones, cláusula y firma del trabajador (RN-016)', responses: { '200': { description: 'OK' } } },
+    },
+    '/tramites/{id}/solicitar-aprobacion-final': {
+      post: { summary: 'Pide la aprobación final a Comunidad Universitaria', responses: { '200': { description: 'OK' } } },
+    },
+    '/tramites/{id}/reiniciar': {
+      post: { summary: 'Reinicia un trámite rechazado copiando los datos anteriores', responses: { '201': { description: 'OK' } } },
+    },
+    '/tramites/{id}/revision-final': {
+      get: { summary: 'Lista de verificación e informe para la aprobación final (solo lectura)', responses: { '200': { description: 'OK' } } },
+    },
+    '/tramites/jefes-inmediatos': {
+      get: { summary: 'Jefes inmediatos entre los que el trabajador elige', responses: { '200': { description: 'OK' } } },
+    },
+    '/notificaciones': {
+      get: { summary: 'Notificaciones del usuario', responses: { '200': { description: 'OK' } } },
     },
     '/desarrollo-profesoral/docentes/{id}': {
       get: { summary: 'Consulta evaluación de los 3 entregables docentes', responses: { '200': { description: 'OK' } } },
       put: { summary: 'Registra los 3 booleanos de entregables: planes_aula, innovaciones, informes (RN-007, RF-008)', responses: { '200': { description: 'OK' } } },
     },
     '/tramites/pendientes-aprobacion': {
-      get: { summary: 'Solicitudes con 0 bloqueos e informe completo listas para revisión final de Comunidad Universitaria (RF-005)', responses: { '200': { description: 'OK' } } },
+      get: { summary: 'Solicitudes de aprobación final pendientes de Comunidad Universitaria (RF-005)', responses: { '200': { description: 'OK' } } },
     },
     '/tramites/{id}/aprobar': {
       post: { summary: 'Aprobación final o rechazo motivado del trámite (RN-002, RN-005, RN-010)', responses: { '200': { description: 'OK' } } },
@@ -114,6 +149,16 @@ const swaggerDocument = {
     },
   },
 };
+
+// Salud del servicio (lo consulta el supervisor de desarrollo). ?db=true comprueba también la base.
+app.get('/api/health', async (req, res) => {
+  const body = { ok: true, uptime: Math.round(process.uptime()) };
+  if (req.query.db === 'true') {
+    body.db = await require('./config/database').checkConnection();
+    body.ok = body.db;
+  }
+  res.status(body.ok ? 200 : 503).json(body);
+});
 
 app.get('/api/docs', (req, res) => {
   res.type('html').send(`<!doctype html>

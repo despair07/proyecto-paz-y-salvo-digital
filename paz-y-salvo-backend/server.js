@@ -45,11 +45,57 @@ async function reportDatabaseStatus() {
   }
 }
 
+// Código de salida cuando el puerto está ocupado: el supervisor no reintenta en bucle.
+const EXIT_PORT_IN_USE = 2;
+
+let server;
+let shuttingDown = false;
+
+async function shutdown(code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('Cerrando servidor…');
+  // Si algo se cuelga al cerrar, se fuerza la salida
+  setTimeout(() => process.exit(code), 5000).unref();
+  try {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    await database.close();
+  } catch (error) {
+    console.error('Error al cerrar:', error.message);
+  }
+  process.exit(code);
+}
+
+// Una promesa rechazada sin manejar no debe tumbar el servidor; una excepción sí (estado incierto)
+process.on('unhandledRejection', (reason) => {
+  console.error('[proceso] Promesa rechazada sin manejar:', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('[proceso] Excepción no capturada:', error.stack || error);
+  shutdown(1);
+});
+process.on('SIGINT', () => shutdown(0));
+process.on('SIGTERM', () => shutdown(0));
+
 const startServer = () => {
-  app.listen(env.PORT, async () => {
+  server = app.listen(env.PORT, async () => {
     console.log(`Servidor corriendo en el puerto ${env.PORT}`);
     await reportDatabaseStatus();
   });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ El puerto ${env.PORT} ya está en uso: hay otro backend abierto. Ciérralo o cambia PORT en .env`);
+      process.exit(EXIT_PORT_IN_USE);
+    }
+    console.error('[servidor] Error:', error);
+    shutdown(1);
+  });
+
+  // Evita que conexiones HTTP colgadas mantengan el proceso o saturen el servidor
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+  server.requestTimeout = 60000;
 };
 
 startServer();

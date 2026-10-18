@@ -22,6 +22,8 @@ paz y salvo/
 
 ## ⚡ Inicio rápido — 3 pasos
 
+> **Atajo:** una vez instaladas las dependencias (`npm install` en `paz-y-salvo-backend` y `paz-y-salvo-frontend`), `npm run dev` desde la raíz del proyecto levanta backend y frontend en una sola terminal. Si un servicio se cae, se reinicia solo; si quedó un servidor viejo ocupando los puertos, usa `npm run dev -- --liberar`. Salud del backend: http://localhost:3000/api/health?db=true
+
 ### 1. Activar el proyecto en Supabase
 > ⚠️ **Los proyectos gratuitos de Supabase se pausan tras 7 días de inactividad.**
 >
