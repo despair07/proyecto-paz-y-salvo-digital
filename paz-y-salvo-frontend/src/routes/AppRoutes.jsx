@@ -1,13 +1,20 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from '../pages/auth/Login';
-import DashboardUser from '../pages/user/DashboardUser';
-import DashboardArea from '../pages/area-manager/DashboardArea';
-import DashboardApprover from '../pages/approver/DashboardApprover';
-import DashboardAdmin from '../pages/admin/DashboardAdmin';
 import VerifyCertificate from '../pages/certificates/VerifyCertificate';
-import Perfil from '../pages/profile/Perfil';
 import ProtectedRoute from './ProtectedRoute';
 import { useAuth } from '../hooks/useAuth';
+
+// Cada panel se descarga solo cuando la persona entra a él (la carga inicial queda más liviana)
+const DashboardUser = lazy(() => import('../pages/user/DashboardUser'));
+const DashboardArea = lazy(() => import('../pages/area-manager/DashboardArea'));
+const DashboardApprover = lazy(() => import('../pages/approver/DashboardApprover'));
+const DashboardAdmin = lazy(() => import('../pages/admin/DashboardAdmin'));
+const Perfil = lazy(() => import('../pages/profile/Perfil'));
+
+const Cargando = () => (
+  <p role="status" className="p-8 text-center text-sm text-slate-500">Cargando…</p>
+);
 
 const HomeRedirect = () => {
   const { user, home } = useAuth();
@@ -20,6 +27,7 @@ const HomeRedirect = () => {
 const AppRoutes = () => {
   return (
     <Router>
+      <Suspense fallback={<Cargando />}>
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/login" element={<Login />} />
@@ -72,6 +80,7 @@ const AppRoutes = () => {
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </Suspense>
     </Router>
   );
 };
