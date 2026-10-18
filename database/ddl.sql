@@ -1,5 +1,5 @@
 -- ============================================================================
--- PAZ & SALVO DIGITAL UNIAUTÓNOMA — DDL CANÓNICO v2.0
+-- PAZ & SALVO DIGITAL UNIAUTÓNOMA — DDL CANÓNICO v2.1
 -- Corporación Universitaria Autónoma del Cauca · PostgreSQL 15+ (Supabase)
 --
 -- ÚNICA fuente de verdad de la estructura de la base de datos.
@@ -9,6 +9,14 @@
 --   (incluidas las de la v1.0) y las vuelve a crear vacías. Úsalo para dejar
 --   la base limpia y consistente. No lo ejecutes sobre datos que quieras
 --   conservar sin respaldarlos antes.
+--
+-- Cambios de la v2.1 (inicio de sesión con Google y registro de usuarios)
+--   · usuarios: origen (REGISTRADO_TI / AUTOREGISTRO), verificado, google_sub y último
+--     acceso; el tipo de vinculación y la cédula pueden estar vacíos hasta que la persona
+--     los diligencia. RN-012: el tipo no se cambia con un trámite abierto.
+--   · notificaciones: avisos dentro del sistema.
+--   · dependencias: nombres originales del formato GTH-07 v2, "aspecto" y si aplican en
+--     un cambio de dependencia.
 --
 -- Cambios respecto a v1.0
 --   · Se eliminan columnas duplicadas (nombre/nombre_dependencia, motivo/
@@ -32,6 +40,7 @@
 DROP VIEW  IF EXISTS v_estado_dependencias_solicitud CASCADE;
 DROP VIEW  IF EXISTS v_resumen_paz_y_salvo CASCADE;
 
+DROP TABLE IF EXISTS notificaciones            CASCADE;
 DROP TABLE IF EXISTS auditoria                CASCADE;
 DROP TABLE IF EXISTS certificados_digitales   CASCADE;
 DROP TABLE IF EXISTS entregables_profesorales CASCADE;
@@ -58,6 +67,7 @@ DROP FUNCTION IF EXISTS fn_trg_entregables_recalcular()         CASCADE;
 DROP FUNCTION IF EXISTS fn_trg_certificados_validar()           CASCADE;
 DROP FUNCTION IF EXISTS fn_trg_auditar()                        CASCADE;
 DROP FUNCTION IF EXISTS fn_trg_touch_updated_at()               CASCADE;
+DROP FUNCTION IF EXISTS fn_trg_usuarios_tipo_vinculacion()      CASCADE;
 
 
 -- ============================================================================
@@ -83,23 +93,33 @@ CREATE TABLE usuarios (
   nombres              VARCHAR(120) NOT NULL,
   apellidos            VARCHAR(160) NOT NULL,
   tipo_documento       VARCHAR(10)  NOT NULL DEFAULT 'CC',
-  numero_documento     VARCHAR(40)  NOT NULL UNIQUE,
+  numero_documento     VARCHAR(40)  UNIQUE,         -- NULL hasta que el trabajador lo diligencia
   correo_institucional VARCHAR(255) NOT NULL UNIQUE,
-  tipo_vinculacion     VARCHAR(30)  NOT NULL,
+  tipo_vinculacion     VARCHAR(30),                 -- NULL hasta que la persona lo elige (RN-012)
   estado               VARCHAR(20)  NOT NULL DEFAULT 'ACTIVO',
-  cargo                VARCHAR(150),              -- cargo actual; lo edita el Admin DTI (RN-011)
-  password_hash        TEXT,                      -- bcrypt; NULL = solo SSO Google
+  cargo                VARCHAR(150),                -- cargo actual; lo edita el Admin DTI (RN-011)
+  origen               VARCHAR(20)  NOT NULL DEFAULT 'REGISTRADO_TI',
+  verificado           BOOLEAN      NOT NULL DEFAULT TRUE,
+  verificado_por       UUID         REFERENCES usuarios(id),
+  fecha_verificacion   TIMESTAMPTZ,
+  google_sub           VARCHAR(64)  UNIQUE,         -- identificador estable de la cuenta de Google
+  ultimo_acceso        TIMESTAMPTZ,
+  password_hash        TEXT,                        -- bcrypt; solo para desarrollo (AUTH_PASSWORD_ENABLED)
   created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   CONSTRAINT ck_usuarios_tipo_doc   CHECK (tipo_documento IN ('CC', 'CE', 'PA', 'TI')),
   CONSTRAINT ck_usuarios_vinculacion CHECK (tipo_vinculacion IN ('Docente', 'Administrativo', 'Contratista')),
   CONSTRAINT ck_usuarios_estado     CHECK (estado IN ('ACTIVO', 'INACTIVO')),
+  CONSTRAINT ck_usuarios_origen     CHECK (origen IN ('REGISTRADO_TI', 'AUTOREGISTRO')),
+  -- Lo que registra TI nace verificado; solo el autoregistro puede estar sin verificar
+  CONSTRAINT ck_usuarios_verificado CHECK (verificado OR origen = 'AUTOREGISTRO'),
   CONSTRAINT ck_usuarios_correo     CHECK (
     correo_institucional = LOWER(correo_institucional)
     AND correo_institucional LIKE '%@uniautonoma.edu.co'
   )
 );
 COMMENT ON COLUMN usuarios.password_hash IS 'Hash bcrypt. Nunca exponer en respuestas de la API.';
+COMMENT ON COLUMN usuarios.verificado IS 'Autoregistro nace FALSE hasta que TI o Talento Humano confirma la vinculación.';
 
 -- 1.3 usuario_roles (N:M)
 CREATE TABLE usuario_roles (
@@ -118,6 +138,8 @@ CREATE TABLE dependencias (
   etapa               SMALLINT     NOT NULL DEFAULT 2,       -- RN-008: 1 Jefe · 2 Áreas · 3 Comunidad
   orden               SMALLINT     NOT NULL DEFAULT 0,       -- orden de aparición en el formato GTH-07
   solo_docentes       BOOLEAN      NOT NULL DEFAULT FALSE,   -- RN-007
+  aplica_cambio_dependencia BOOLEAN NOT NULL DEFAULT TRUE,        -- ¿firma también en un cambio de dependencia?
+  aspecto             TEXT,                                      -- "Aspecto sobre el que se da paz y salvo" (GTH-07)
   es_aprobadora_final BOOLEAN      NOT NULL DEFAULT FALSE,   -- RN-002
   created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   CONSTRAINT ck_dependencias_etapa CHECK (etapa IN (1, 2, 3)),
@@ -299,6 +321,20 @@ CREATE TABLE auditoria (
   CONSTRAINT ck_auditoria_accion CHECK (accion IN ('INSERT', 'UPDATE', 'DELETE'))
 );
 
+-- 2.7 notificaciones (avisos dentro del sistema)
+CREATE TABLE notificaciones (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario_id    UUID         NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  tipo          VARCHAR(40)  NOT NULL,
+  titulo        VARCHAR(160) NOT NULL,
+  mensaje       TEXT         NOT NULL,
+  referencia    JSONB        NOT NULL DEFAULT '{}'::jsonb,
+  leida         BOOLEAN      NOT NULL DEFAULT FALSE,
+  fecha_lectura TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  CONSTRAINT ck_notificaciones_lectura CHECK (leida = (fecha_lectura IS NOT NULL))
+);
+
 
 -- ============================================================================
 -- 3. ÍNDICES (todas las FK usadas en filtros y joins)
@@ -315,6 +351,8 @@ CREATE INDEX idx_entregables_evaluador      ON entregables_profesorales (evaluad
 CREATE INDEX idx_certificados_emitido_por   ON certificados_digitales (emitido_por);
 CREATE INDEX idx_auditoria_registro         ON auditoria (tabla, registro_id);
 CREATE INDEX idx_auditoria_fecha            ON auditoria (fecha DESC);
+CREATE INDEX idx_notificaciones_usuario     ON notificaciones (usuario_id, leida, created_at DESC);
+CREATE INDEX idx_usuarios_verificado        ON usuarios (verificado) WHERE NOT verificado;
 
 
 -- ============================================================================
@@ -334,6 +372,25 @@ CREATE TRIGGER trg_usuarios_updated      BEFORE UPDATE ON usuarios              
 CREATE TRIGGER trg_solicitudes_updated   BEFORE UPDATE ON solicitudes_paz_y_salvo  FOR EACH ROW EXECUTE FUNCTION fn_trg_touch_updated_at();
 CREATE TRIGGER trg_informes_updated      BEFORE UPDATE ON informes_entrega_cargo   FOR EACH ROW EXECUTE FUNCTION fn_trg_touch_updated_at();
 CREATE TRIGGER trg_entregables_updated   BEFORE UPDATE ON entregables_profesorales FOR EACH ROW EXECUTE FUNCTION fn_trg_touch_updated_at();
+
+-- 4.1b RN-012 · el tipo de vinculación no cambia con un trámite abierto
+CREATE FUNCTION fn_trg_usuarios_tipo_vinculacion() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF OLD.tipo_vinculacion IS NOT NULL
+     AND NEW.tipo_vinculacion IS DISTINCT FROM OLD.tipo_vinculacion
+     AND EXISTS (SELECT 1 FROM solicitudes_paz_y_salvo s
+                  WHERE s.usuario_id = NEW.id AND s.estado_global IN ('EN_PROCESO', 'AL_DIA')) THEN
+    RAISE EXCEPTION 'RN-012: no puede cambiar su tipo de vinculación mientras tenga un trámite de paz y salvo en curso'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_usuarios_tipo_vinculacion
+BEFORE UPDATE OF tipo_vinculacion ON usuarios
+FOR EACH ROW EXECUTE FUNCTION fn_trg_usuarios_tipo_vinculacion();
 
 -- 4.2 RN-001 / RN-008 · estado global y etapa se recalculan solos
 --   estado_global: AL_DIA solo con 0 bloqueos activos.
@@ -713,6 +770,7 @@ ALTER TABLE bloqueos_dependencia     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE entregables_profesorales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE certificados_digitales   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auditoria                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notificaciones           ENABLE ROW LEVEL SECURITY;
 
 -- En Supabase los roles anon/authenticated reciben permisos por defecto: se retiran.
 DO $$

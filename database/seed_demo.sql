@@ -20,6 +20,9 @@
 SELECT set_config('app.audit_reason', 'Carga inicial de datos ficticios', TRUE);
 
 -- 1. USUARIOS ----------------------------------------------------------------
+-- El personal de áreas (jefe, encargados, aprobador, DTI) no tiene tipo de vinculación: no gestiona
+-- paz y salvo propio hasta que elija un tipo en su perfil. Laura, Carlos, Sofía, Mateo y Valentina
+-- (trabajadores) ya tienen su tipo definido.
 INSERT INTO usuarios (id, nombres, apellidos, tipo_documento, numero_documento, correo_institucional, tipo_vinculacion, estado, cargo, password_hash) VALUES
   -- Trabajadores
   ('11111111-1111-4111-8111-111111111111', 'Laura Marcela',     'Ortiz Peña',       'CC', '1.061.700.101', 'laura.ortiz@uniautonoma.edu.co',            'Docente',        'ACTIVO', 'Docente de Planta', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
@@ -28,16 +31,16 @@ INSERT INTO usuarios (id, nombres, apellidos, tipo_documento, numero_documento, 
   ('11111111-1111-4111-8111-eeeeeeeeeeee', 'Mateo Andrés',      'Gómez Zúñiga',     'CC', '1.061.700.114', 'mateo.gomez@uniautonoma.edu.co',            'Administrativo', 'ACTIVO', 'Profesional Universitario', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
   ('11111111-1111-4111-8111-ffffffffffff', 'Valentina Isabel',  'Narváez Mosquera', 'CC', '1.061.700.115', 'valentina.narvaez@uniautonoma.edu.co',     'Docente',        'ACTIVO', 'Docente de Cátedra', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
   -- Jefe inmediato, encargados de área, aprobador y administrador
-  ('11111111-1111-4111-8111-444444444444', 'Martha Lucía',      'Quintero',         'CC', '1.061.700.104', 'jefe.inmediato@uniautonoma.edu.co',         'Administrativo', 'ACTIVO', 'Coordinador Administrativo', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-555555555555', 'Andrés Felipe',     'Valencia',         'CC', '1.061.700.105', 'encargado.dti@uniautonoma.edu.co',          'Administrativo', 'ACTIVO', 'Analista de Sistemas', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-666666666666', 'Juliana',           'Restrepo Gómez',   'CC', '1.061.700.106', 'encargado.medios@uniautonoma.edu.co',       'Administrativo', 'ACTIVO', 'Auxiliar de Biblioteca', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-777777777777', 'Héctor Fabio',      'Mosquera',         'CC', '1.061.700.107', 'encargado.almacen@uniautonoma.edu.co',      'Administrativo', 'ACTIVO', 'Coordinador Administrativo', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-888888888888', 'Diana Carolina',    'Bolaños',          'CC', '1.061.700.108', 'encargado.archivo@uniautonoma.edu.co',      'Administrativo', 'ACTIVO', 'Auxiliar Administrativo', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-999999999999', 'Ricardo Alonso',    'Paz',              'CC', '1.061.700.109', 'encargado.financiera@uniautonoma.edu.co',   'Administrativo', 'ACTIVO', 'Auxiliar Contable', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-aaaaaaaaaaaa', 'Natalia Andrea',    'Ramírez',          'CC', '1.061.700.110', 'encargado.sst@uniautonoma.edu.co',          'Administrativo', 'ACTIVO', 'Profesional Universitario', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-bbbbbbbbbbbb', 'Camilo Ernesto',    'Vidal',            'CC', '1.061.700.111', 'encargado.profesoral@uniautonoma.edu.co',   'Administrativo', 'ACTIVO', 'Profesional Universitario', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-cccccccccccc', 'Patricia Elena',    'Lasso',            'CC', '1.061.700.112', 'aprobador.comunidad@uniautonoma.edu.co',    'Administrativo', 'ACTIVO', 'Jefe de División', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
-  ('11111111-1111-4111-8111-dddddddddddd', 'Sebastián Iván',    'Mera',             'CC', '1.061.700.113', 'admin.dti@uniautonoma.edu.co',              'Administrativo', 'ACTIVO', 'Analista de Sistemas', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6')
+  ('11111111-1111-4111-8111-444444444444', 'Martha Lucía',      'Quintero',         'CC', '1.061.700.104', 'jefe.inmediato@uniautonoma.edu.co',         NULL, 'ACTIVO', 'Coordinador Administrativo', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-555555555555', 'Andrés Felipe',     'Valencia',         'CC', '1.061.700.105', 'encargado.dti@uniautonoma.edu.co',          NULL, 'ACTIVO', 'Analista de Sistemas', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-666666666666', 'Juliana',           'Restrepo Gómez',   'CC', '1.061.700.106', 'encargado.medios@uniautonoma.edu.co',       NULL, 'ACTIVO', 'Auxiliar de Biblioteca', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-777777777777', 'Héctor Fabio',      'Mosquera',         'CC', '1.061.700.107', 'encargado.almacen@uniautonoma.edu.co',      NULL, 'ACTIVO', 'Coordinador Administrativo', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-888888888888', 'Diana Carolina',    'Bolaños',          'CC', '1.061.700.108', 'encargado.archivo@uniautonoma.edu.co',      NULL, 'ACTIVO', 'Auxiliar Administrativo', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-999999999999', 'Ricardo Alonso',    'Paz',              'CC', '1.061.700.109', 'encargado.financiera@uniautonoma.edu.co',   NULL, 'ACTIVO', 'Auxiliar Contable', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-aaaaaaaaaaaa', 'Natalia Andrea',    'Ramírez',          'CC', '1.061.700.110', 'encargado.sst@uniautonoma.edu.co',          NULL, 'ACTIVO', 'Profesional Universitario', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-bbbbbbbbbbbb', 'Camilo Ernesto',    'Vidal',            'CC', '1.061.700.111', 'encargado.profesoral@uniautonoma.edu.co',   NULL, 'ACTIVO', 'Profesional Universitario', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-cccccccccccc', 'Patricia Elena',    'Lasso',            'CC', '1.061.700.112', 'aprobador.comunidad@uniautonoma.edu.co',    NULL, 'ACTIVO', 'Jefe de División', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6'),
+  ('11111111-1111-4111-8111-dddddddddddd', 'Sebastián Iván',    'Mera',             'CC', '1.061.700.113', 'admin.dti@uniautonoma.edu.co',              NULL, 'ACTIVO', 'Analista de Sistemas', '$2b$10$WqkYeU652pSim.FgFUP5aO3CPRbr8FhD9rHEjPgT0.LwA9YIT2Zc6')
 ON CONFLICT (correo_institucional) DO UPDATE
   SET nombres = EXCLUDED.nombres, apellidos = EXCLUDED.apellidos,
       numero_documento = EXCLUDED.numero_documento,

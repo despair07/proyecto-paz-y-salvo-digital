@@ -18,32 +18,57 @@ INSERT INTO roles (id, nombre_rol, descripcion) VALUES
 ON CONFLICT (nombre_rol) DO UPDATE
   SET descripcion = EXCLUDED.descripcion;
 
--- 2. DEPENDENCIAS (formato GTH-07) -------------------------------------------
--- etapa: 1 = Jefe Inmediato · 2 = Áreas de gestión (en paralelo) · 3 = Comunidad Universitaria (RN-008)
-INSERT INTO dependencias (id, nombre, descripcion, etapa, orden, solo_docentes, es_aprobadora_final) VALUES
+-- 2. DEPENDENCIAS (formato GTH-07 v2: mismos nombres y aspectos del documento oficial) ------
+-- etapa: 1 = Jefe Inmediato · 2 = Áreas de gestión (en paralelo) · 3 = Comunidad Universitaria
+-- aplica_cambio_dependencia: si la dependencia también firma cuando el tipo de novedad es
+--   "Cambio de dependencia" (SST valida exámenes por retiro, por eso no aplica).
+-- El Centro de Desarrollo Profesoral tiene tres aspectos (sección 4 del formato); se manejan
+--   como los tres entregables docentes.
+INSERT INTO dependencias (id, nombre, descripcion, aspecto, etapa, orden, solo_docentes, aplica_cambio_dependencia, es_aprobadora_final) VALUES
   ('6513e4af-9d27-4d7e-9eb4-111111111111', 'Jefe Inmediato',
-     'Validación del informe por entrega de cargo, archivos físicos y digitales, e informe de gestión', 1, 1, FALSE, FALSE),
-  ('6513e4af-9d27-4d7e-9eb4-222222222222', 'División de Tecnologías de la Información (DTI)',
-     'Devolución de equipos de cómputo, accesos a sistemas, licencias y correo institucional', 2, 2, FALSE, FALSE),
-  ('6513e4af-9d27-4d7e-9eb4-333333333333', 'Medios Educativos',
-     'Devolución de material bibliográfico, equipos audiovisuales y recursos de laboratorio', 2, 3, FALSE, FALSE),
+     'Paz y Salvo jefe inmediato',
+     'Recepción de archivos físicos, digitales o en medios magnéticos, informe y productos elaborados por el trabajador o contratista',
+     1, 1, FALSE, TRUE, FALSE),
+  ('6513e4af-9d27-4d7e-9eb4-222222222222', 'Tecnologías de la información y transformación digital',
+     'Paz y Salvo áreas de gestión',
+     'Recibí:',
+     2, 2, FALSE, TRUE, FALSE),
+  ('6513e4af-9d27-4d7e-9eb4-333333333333', 'Medios Educativos (Vicerrectoría Académica)',
+     'Paz y Salvo áreas de gestión',
+     'Recibí:',
+     2, 3, FALSE, TRUE, FALSE),
   ('6513e4af-9d27-4d7e-9eb4-444444444444', 'Almacén',
-     'Devolución de elementos de inventario físico, herramientas y activos fijos asignados', 2, 4, FALSE, FALSE),
+     'Paz y Salvo áreas de gestión',
+     'Recibí los elementos asignados por inventario',
+     2, 4, FALSE, TRUE, FALSE),
   ('6513e4af-9d27-4d7e-9eb4-555555555555', 'Archivo y Correspondencia',
-     'Entrega de libros de archivo, expedientes documentales e inventario de correspondencia', 2, 5, FALSE, FALSE),
-  ('6513e4af-9d27-4d7e-9eb4-666666666666', 'División Contable y Financiera',
-     'Saldos deudores, préstamos, anticipos pendientes de descuento o cuentas por pagar', 2, 6, FALSE, FALSE),
-  ('6513e4af-9d27-4d7e-9eb4-777777777777', 'Seguridad y Salud en el Trabajo (SST)',
-     'Realización y radicación del examen médico obligatorio de retiro', 2, 7, FALSE, FALSE),
+     'Paz y Salvo áreas de gestión',
+     'Revisé la entrega de libros, expedientes o archivos a su cargo y del inventario de los documentos a su cargo',
+     2, 5, FALSE, TRUE, FALSE),
+  ('6513e4af-9d27-4d7e-9eb4-666666666666', 'División Contable Y Financiera',
+     'Paz y Salvo áreas de gestión',
+     'Revisé si contablemente presenta algún saldo u obligación para ser descontado.',
+     2, 6, FALSE, TRUE, FALSE),
+  ('6513e4af-9d27-4d7e-9eb4-777777777777', 'Seguridad y Salud en el Trabajo',
+     'Paz y Salvo áreas de gestión',
+     'Se realizaron los respectivos exámenes médicos por retiro del empleado.',
+     2, 7, FALSE, FALSE, FALSE),
   ('6513e4af-9d27-4d7e-9eb4-888888888888', 'Centro de Desarrollo Profesoral',
-     'Evaluación de los 3 entregables docentes: planes de aula, innovaciones educativas e informes de ejecución', 2, 8, TRUE, FALSE),
-  ('6513e4af-9d27-4d7e-9eb4-999999999999', 'División de Comunidad Universitaria',
-     'Aprobación institucional final y cierre definitivo del paz y salvo', 3, 9, FALSE, TRUE)
-ON CONFLICT (nombre) DO UPDATE
-  SET descripcion         = EXCLUDED.descripcion,
-      etapa               = EXCLUDED.etapa,
-      orden               = EXCLUDED.orden,
-      solo_docentes       = EXCLUDED.solo_docentes,
+     'Paz y Salvo a profesores',
+     NULL,
+     2, 8, TRUE, TRUE, FALSE),
+  ('6513e4af-9d27-4d7e-9eb4-999999999999', 'División De Comunidad Universitaria',
+     'Paz y Salvo áreas de gestión',
+     NULL,
+     3, 9, FALSE, TRUE, TRUE)
+ON CONFLICT (id) DO UPDATE
+  SET nombre = EXCLUDED.nombre,
+      descripcion = EXCLUDED.descripcion,
+      aspecto = EXCLUDED.aspecto,
+      etapa = EXCLUDED.etapa,
+      orden = EXCLUDED.orden,
+      solo_docentes = EXCLUDED.solo_docentes,
+      aplica_cambio_dependencia = EXCLUDED.aplica_cambio_dependencia,
       es_aprobadora_final = EXCLUDED.es_aprobadora_final;
 
 -- 3. CATÁLOGO DE CARGOS ------------------------------------------------------

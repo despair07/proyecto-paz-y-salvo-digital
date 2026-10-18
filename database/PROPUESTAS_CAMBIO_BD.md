@@ -15,6 +15,17 @@ Historial de las decisiones tomadas en el DDL v2.0 (`ddl.sql`). Las propuestas p
 | Seguridad | RLS activo en todas las tablas sin políticas para `anon`/`authenticated`; el backend usa el rol `postgres` | La API REST de Supabase no debe exponer datos de personal |
 | Catálogo de cargos | Tabla `catalogo_cargos` (la usan `/cargos` y RN-011) | Existía en el código pero no en el DDL |
 
+## Decisiones de la v2.1 (inicio de sesión con Google y registro)
+
+| Tema | Decisión | Motivo |
+|------|----------|--------|
+| Registro de usuarios | Autoregistro con Google (`origen = AUTOREGISTRO`, `verificado = FALSE`) y verificación posterior por TI | La universidad no asigna roles automáticamente y el dominio puede incluir estudiantes; se pidió la lista de personal a la universidad (opción A) y mientras tanto se verifica a mano |
+| Tipo de vinculación | Atributo del usuario, elegido por la persona; `usuario_roles` solo guarda el rol de trabajador correspondiente | Un solo tipo a la vez; los roles de área los asigna TI |
+| Cambio de tipo (RN-012) | Trigger que lo rechaza con un trámite en `EN_PROCESO` o `AL_DIA`; el backend exige confirmación y notifica | No se alteran las dependencias aplicables a mitad de un trámite |
+| Cédula y tipo vacíos | `numero_documento` y `tipo_vinculacion` aceptan NULL | Google no entrega la cédula; se diligencia en el formulario |
+| Notificaciones | Tabla `notificaciones`, solo dentro del sistema | El correo se agrega después sin cambiar el modelo |
+| Dependencias | Nombres y aspectos originales del GTH-07 v2, `aplica_cambio_dependencia` (SST = no) | Mismos nombres del formato; el valor por defecto de "Cambio de dependencia" debe confirmarlo Talento Humano |
+
 ## Pendientes
 
 - **TODO-ADMIN-01**: definir si el Admin DTI podrá crear usuarios y asignar roles desde la UI.
