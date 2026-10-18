@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   getNotifications,
   markAllNotificationsRead,
@@ -6,6 +7,19 @@ import {
 } from '../../services/notifications.service';
 
 const REFRESH_MS = 60000;
+
+// A dónde lleva cada tipo de aviso al abrirlo
+const DESTINOS = {
+  NUEVO_USUARIO_SIN_VERIFICAR: '/dashboard/admin?tab=solicitantes&filtro=pendientes',
+  CAMBIO_TIPO_VINCULACION: '/dashboard/admin?tab=solicitantes',
+  SOLICITUD_REVISION: '/dashboard/encargado',
+  SOLICITUD_APROBACION_FINAL: '/dashboard/aprobador',
+  REVISION_APROBADA: '/dashboard/usuario',
+  REVISION_BLOQUEADA: '/dashboard/usuario',
+  TRAMITE_APROBADO: '/dashboard/usuario',
+  TRAMITE_RECHAZADO: '/dashboard/usuario',
+  VINCULACION_VERIFICADA: '/dashboard/usuario',
+};
 
 function timeAgo(value) {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
@@ -23,6 +37,7 @@ const NotificationBell = () => {
   const [unread, setUnread] = useState(0);
   const [error, setError] = useState('');
   const containerRef = useRef(null);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     try {
@@ -63,6 +78,11 @@ const NotificationBell = () => {
   };
 
   const handleRead = async (item) => {
+    const destino = DESTINOS[item.tipo];
+    if (destino) {
+      setOpen(false);
+      navigate(destino);
+    }
     if (item.leida) return;
     try {
       await markNotificationRead(item.id);
