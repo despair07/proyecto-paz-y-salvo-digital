@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ReviewState, { CATEGORIAS_BLOQUEO } from '../../components/common/ReviewState';
-import InformeForm from '../../components/informe/InformeForm';
 import { useAuth } from '../../hooks/useAuth';
 import {
   aprobarRevision, bloquearRevision, getRevision, listRevisiones, saveEntregables,
@@ -34,8 +33,6 @@ const Detalle = ({ id, onVolver, onDecidido, notificar }) => {
   const [categoria, setCategoria] = useState('INVENTARIO_ELEMENTOS');
   const [motivo, setMotivo] = useState('');
   const [procesando, setProcesando] = useState(false);
-  const [verInforme, setVerInforme] = useState(false);
-  const [guardandoEntregable, setGuardandoEntregable] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -55,19 +52,20 @@ const Detalle = ({ id, onVolver, onDecidido, notificar }) => {
     setRecibi('');
     setMotivo('');
     setModo(null);
-    setVerInforme(false);
     cargar();
   }, [cargar]);
 
+  // Marca al instante en pantalla y guarda en segundo plano; si falla, deshace el cambio.
   const cambiarEntregable = async (clave, valor) => {
-    setGuardandoEntregable(true);
+    const previo = r.entregables || {};
+    const nuevo = { ...previo, [clave]: valor };
+    nuevo.completo = ENTREGABLES.every(([k]) => nuevo[k]);
+    setR((actual) => ({ ...actual, entregables: nuevo }));
     try {
       await saveEntregables(r.solicitudId, { [clave]: valor });
-      await cargar();
     } catch (err) {
+      setR((actual) => ({ ...actual, entregables: previo }));
       setError(mensajeError(err, 'No se pudo guardar el entregable'));
-    } finally {
-      setGuardandoEntregable(false);
     }
   };
 
@@ -166,7 +164,7 @@ const Detalle = ({ id, onVolver, onDecidido, notificar }) => {
         )}
 
         {r.soloDocentes && (
-          <fieldset className="mt-4" disabled={!r.puedeDecidir || guardandoEntregable}>
+          <fieldset className="mt-4" disabled={!r.puedeDecidir}>
             <legend className="text-xs font-bold uppercase tracking-wider text-slate-500">Entregables del docente (una sola persona los revisa)</legend>
             <ul className="mt-2 space-y-2">
               {ENTREGABLES.map(([clave, texto]) => (
@@ -299,25 +297,6 @@ const Detalle = ({ id, onVolver, onDecidido, notificar }) => {
               </li>
             ))}
           </ul>
-        </section>
-      )}
-
-      {r.informe && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <button
-            type="button"
-            onClick={() => setVerInforme((v) => !v)}
-            aria-expanded={verInforme}
-            className="flex w-full items-center justify-between text-left text-sm font-bold text-[#0A2540]"
-          >
-            <span>Informe por entrega de cargo (solo lectura){r.informe.estado === 'COMPLETO' ? ' · completo' : ' · en borrador'}</span>
-            <span aria-hidden="true">{verInforme ? '▲' : '▼'}</span>
-          </button>
-          {verInforme && (
-            <div className="mt-4">
-              <InformeForm secciones={r.informe.secciones} readOnly compacto />
-            </div>
-          )}
         </section>
       )}
     </div>

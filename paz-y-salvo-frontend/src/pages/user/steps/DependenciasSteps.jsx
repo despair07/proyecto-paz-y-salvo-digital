@@ -44,7 +44,7 @@ export const JefeStep = ({ data, ctx }) => {
     <Contenedor
       id="titulo-jefe"
       titulo="2. Paz y Salvo jefe inmediato"
-      descripcion="Tu jefe inmediato confirma que recibió tus archivos físicos, digitales o en medios magnéticos, el informe y los productos elaborados. Para pedírselo necesitas el informe por entrega de cargo completo."
+      descripcion="Tu jefe inmediato confirma que recibió tus archivos físicos, digitales o en medios magnéticos, el informe y los productos elaborados."
     >
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label htmlFor="jefe-select" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">

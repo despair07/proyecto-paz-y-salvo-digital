@@ -127,6 +127,10 @@ const Perfil = () => {
   const roles = user?.roles?.map((r) => (typeof r === 'string' ? r : r.nombre_rol)) ?? [];
   const tipoActual = user?.tipo_vinculacion || null;
   const isOnboarding = roles.length === 0;
+  // El personal de las dependencias, la aprobación final y TI no tramitan paz y salvo propio:
+  // no eligen tipo de vinculación.
+  const esPersonal = !['Docente', 'Administrativo', 'Contratista'].some((r) => roles.includes(r))
+    && ['Encargado de Área', 'Jefe Inmediato', 'Aprobador Comunidad Universitaria', 'Administrador DTI'].some((r) => roles.includes(r));
   const nombre = [user?.nombres, user?.apellidos].filter(Boolean).join(' ') || user?.nombre_completo;
 
   const [selected, setSelected] = useState(tipoActual);
@@ -203,12 +207,14 @@ const Perfil = () => {
               <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Correo institucional</dt>
               <dd className="mt-0.5 break-all text-slate-800">{user?.correo_institucional}</dd>
             </div>
+            {!esPersonal && (
+              <div>
+                <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Tipo de vinculación</dt>
+                <dd className="mt-0.5 text-slate-800">{tipoActual || 'Sin definir'}</dd>
+              </div>
+            )}
             <div>
-              <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Tipo de vinculación</dt>
-              <dd className="mt-0.5 text-slate-800">{tipoActual || 'Sin definir'}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Roles en el sistema</dt>
+              <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{esPersonal ? 'Cargo en el sistema' : 'Roles en el sistema'}</dt>
               <dd className="mt-0.5 text-slate-800">{roles.length ? roles.join(', ') : 'Ninguno todavía'}</dd>
             </div>
           </dl>
@@ -222,6 +228,7 @@ const Perfil = () => {
 
         {!isOnboarding && <FirmaSection />}
 
+        {!esPersonal && (
         <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
           <fieldset>
             <legend className="text-base font-bold text-[#0A2540]">
@@ -275,6 +282,7 @@ const Perfil = () => {
             </button>
           </div>
         </form>
+        )}
       </div>
 
       {confirming && (

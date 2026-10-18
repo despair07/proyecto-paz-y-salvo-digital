@@ -176,6 +176,26 @@ const CierreStep = ({ data, ctx }) => {
   // ------------------------------------------------------------ edición normal
   const faltantes = data.faltantesAprobacionFinal || [];
 
+  // El cierre y la firma se hacen al final: antes, las dependencias y el informe pueden avanzar en paralelo
+  if (!cierre.habilitado) {
+    const pendientes = faltantes.filter((f) => !/cláusula/i.test(f));
+    return (
+      <section aria-labelledby="titulo-cierre" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+        <h2 id="titulo-cierre" className="text-lg font-bold text-[#0A2540]">Cierre y firma</h2>
+        <p className="mt-2 text-sm text-slate-700">
+          Este paso se habilita al final, cuando todas las dependencias hayan aprobado y tu informe esté completo. Mientras
+          tanto puedes avanzar en los demás pasos en el orden que prefieras.
+        </p>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-700">
+          {pendientes.map((f) => <li key={f}>{f}</li>)}
+        </ul>
+        <div className="mt-4">
+          <button type="button" onClick={() => ctx.irAPaso('informe')} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">← Anterior</button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby="titulo-cierre" className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">

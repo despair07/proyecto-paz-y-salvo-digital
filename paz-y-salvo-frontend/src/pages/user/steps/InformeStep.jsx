@@ -83,7 +83,7 @@ const InformeStep = ({ data, ctx }) => {
       setResumen(res.resumen);
       setEstado('COMPLETO');
       setGuardado('ok');
-      ctx.notify('Informe por entrega de cargo completo. Ya puedes pedir el paz y salvo de tu jefe inmediato.');
+      ctx.notify('Informe por entrega de cargo completo.');
       await ctx.recargar({ silencioso: true });
     } catch (err) {
       const detalles = err.response?.data?.detalles;
