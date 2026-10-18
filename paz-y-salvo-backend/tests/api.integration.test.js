@@ -750,3 +750,153 @@ describe('Catálogos y administración (RN-011)', () => {
     expect(renamed.body.data.nombre).toBe('Auxiliar Contable I');
   });
 });
+
+describe('Administración DTI: solicitantes y personal de las dependencias (RN-011, RN-012)', () => {
+  let autoregistrado;
+  const ADMIN_ID = '11111111-1111-4111-8111-dddddddddddd';
+  const del = async (who, url) => request(app).delete(`${API}${url}`).set(await as(who));
+  const idDe = async (correo) => (await db.query('SELECT id FROM usuarios WHERE correo_institucional = $1', [correo])).rows[0].id;
+
+  beforeAll(async () => {
+    const { rows } = await db.query(
+      `INSERT INTO usuarios (nombres, apellidos, correo_institucional, origen, verificado, google_sub)
+       VALUES ('Duvan', 'Jaramillo', 'duvan.test@uniautonoma.edu.co', 'AUTOREGISTRO', FALSE, 'google-sub-duvan') RETURNING id`
+    );
+    autoregistrado = rows[0].id;
+  });
+
+  it('solo el Administrador DTI entra al panel', async () => {
+    for (const who of ['laura', 'ti', 'jefe', 'aprobador']) {
+      expect((await get(who, '/admin/solicitantes')).status).toBe(403);
+      expect((await get(who, '/admin/personal')).status).toBe(403);
+    }
+  });
+
+  it('lista a los solicitantes por separado del personal y cuenta los pendientes', async () => {
+    const res = await get('admin', '/admin/solicitantes?filtro=pendientes');
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((u) => u.correo_institucional)).toEqual(['duvan.test@uniautonoma.edu.co']);
+    expect(res.body.conteos.pendientes).toBe(1);
+
+    const todos = (await get('admin', '/admin/solicitantes?filtro=todos&limit=100')).body.data.map((u) => u.correo_institucional);
+    expect(todos).toEqual(expect.arrayContaining([EMAIL.laura, EMAIL.carlos, EMAIL.sofia]));
+    expect(todos).not.toContain(EMAIL.ti);
+    expect(todos).not.toContain(EMAIL.admin);
+  });
+
+  it('lista al personal con su dependencia', async () => {
+    const res = await get('admin', '/admin/personal?limit=100');
+    expect(res.status).toBe(200);
+    const ti = res.body.data.find((u) => u.correo_institucional === EMAIL.ti);
+    expect(ti.dependencias.map((d) => d.nombre)).toEqual(['Tecnologías de la información y transformación digital']);
+    expect(ti.roles).toEqual(['Encargado de Área']);
+    expect(res.body.data.some((u) => u.correo_institucional === EMAIL.laura)).toBe(false);
+    expect(res.body.dependencias).toHaveLength(9);
+  });
+
+  it('confirma la vinculación y la persona recibe un aviso', async () => {
+    expect((await put('admin', `/admin/usuarios/${autoregistrado}/verificacion`, { decision: 'TAL VEZ' })).status).toBe(400);
+    const ok = await put('admin', `/admin/usuarios/${autoregistrado}/verificacion`, { decision: 'CONFIRMAR' });
+    expect(ok.status).toBe(200);
+    const fila = (await db.query('SELECT verificado, verificado_por FROM usuarios WHERE id = $1', [autoregistrado])).rows[0];
+    expect(fila.verificado).toBe(true);
+    expect(fila.verificado_por).toBe(ADMIN_ID);
+    expect((await db.query("SELECT 1 FROM notificaciones WHERE usuario_id = $1 AND tipo = 'VINCULACION_VERIFICADA'", [autoregistrado])).rows).toHaveLength(1);
+    expect((await put('admin', `/admin/usuarios/${autoregistrado}/verificacion`, { decision: 'CONFIRMAR' })).status).toBe(409);
+  });
+
+  it('rechaza un autoregistro dejándolo inactivo y se puede reactivar', async () => {
+    const { rows } = await db.query(
+      `INSERT INTO usuarios (nombres, apellidos, correo_institucional, origen, verificado)
+       VALUES ('Intruso', 'Prueba', 'intruso@uniautonoma.edu.co', 'AUTOREGISTRO', FALSE) RETURNING id`
+    );
+    const id = rows[0].id;
+    expect((await put('admin', `/admin/usuarios/${id}/verificacion`, { decision: 'RECHAZAR' })).status).toBe(200);
+    expect((await db.query('SELECT estado FROM usuarios WHERE id = $1', [id])).rows[0].estado).toBe('INACTIVO');
+    expect((await get('admin', '/admin/solicitantes?filtro=inactivos')).body.data.map((u) => u.id)).toContain(id);
+    expect((await put('admin', `/admin/usuarios/${id}/estado`, { estado: 'ACTIVO' })).status).toBe(200);
+  });
+
+  it('corrige nombre y correo; el correo debe ser institucional y no repetirse', async () => {
+    const base = { nombres: 'Duvan Felipe', apellidos: 'David Jaramillo', cargo: 'Estudiante' };
+    expect((await put('admin', `/admin/usuarios/${autoregistrado}`, { ...base, correo_institucional: 'x@gmail.com' })).status).toBe(400);
+    expect((await put('admin', `/admin/usuarios/${autoregistrado}`, { ...base, correo_institucional: EMAIL.laura })).status).toBe(409);
+    expect((await put('admin', `/admin/usuarios/${autoregistrado}`, { ...base, nombres: '', correo_institucional: 'duvan.test@uniautonoma.edu.co' })).status).toBe(400);
+
+    const ok = await put('admin', `/admin/usuarios/${autoregistrado}`, { ...base, correo_institucional: 'Duvan.David.J@uniautonoma.edu.co' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data).toMatchObject({ nombres: 'Duvan Felipe', correo_institucional: 'duvan.david.j@uniautonoma.edu.co' });
+    // al cambiar el correo se suelta la cuenta de Google enlazada al correo anterior
+    expect((await db.query('SELECT google_sub FROM usuarios WHERE id = $1', [autoregistrado])).rows[0].google_sub).toBeNull();
+  });
+
+  it('no modifica cuentas de administración ni desactiva la propia (RN-011)', async () => {
+    const datos = { nombres: 'Otro', apellidos: 'Nombre', correo_institucional: EMAIL.admin };
+    expect((await put('admin', `/admin/usuarios/${ADMIN_ID}`, datos)).status).toBe(403);
+    expect((await put('admin', `/admin/usuarios/${ADMIN_ID}/estado`, { estado: 'INACTIVO' })).status).toBe(409);
+  });
+
+  it('registra personal nuevo con su dependencia y promueve a quien ya ingresó por Google', async () => {
+    const datos = { nombres: 'Rosa Elena', apellidos: 'Cerón Ruiz', correo_institucional: 'rosa.ceron@uniautonoma.edu.co', cargo: 'Auxiliar de Almacén', dependencia_id: DEP.almacen };
+    expect((await post('admin', '/admin/personal', { ...datos, dependencia_id: undefined })).status).toBe(400);
+    const res = await post('admin', '/admin/personal', datos);
+    expect(res.status).toBe(201);
+    const fila = (await db.query(
+      `SELECT u.verificado, u.origen, r.nombre_rol, ed.dependencia_id
+         FROM usuarios u JOIN usuario_roles ur ON ur.usuario_id = u.id JOIN roles r ON r.id = ur.rol_id
+         JOIN encargados_dependencia ed ON ed.usuario_id = u.id WHERE u.id = $1`, [res.body.id]
+    )).rows[0];
+    expect(fila).toMatchObject({ verificado: true, origen: 'REGISTRADO_TI', nombre_rol: 'Encargado de Área', dependencia_id: DEP.almacen });
+    expect((await post('admin', '/admin/personal', datos)).status).toBe(409); // ya es personal
+
+    const promovido = await post('admin', '/admin/personal', {
+      nombres: 'Duvan Felipe', apellidos: 'David Jaramillo', correo_institucional: 'duvan.david.j@uniautonoma.edu.co', dependencia_id: DEP.jefe,
+    });
+    expect(promovido.status).toBe(201);
+    expect(promovido.body.id).toBe(autoregistrado);
+    expect((await db.query(
+      'SELECT r.nombre_rol FROM usuario_roles ur JOIN roles r ON r.id = ur.rol_id WHERE ur.usuario_id = $1', [autoregistrado]
+    )).rows.map((r) => r.nombre_rol)).toEqual(['Jefe Inmediato']);
+  });
+
+  it('cambia la dependencia del personal y ajusta su rol', async () => {
+    const rosa = await idDe('rosa.ceron@uniautonoma.edu.co');
+    expect((await put('admin', `/admin/personal/${rosa}/dependencia`, { dependencia_id: DEP.archivo })).status).toBe(200);
+    const lista = (await get('admin', '/admin/personal?q=rosa')).body.data[0];
+    expect(lista.dependencias.map((d) => d.id)).toEqual([DEP.archivo]);
+    expect(lista.roles).toEqual(['Encargado de Área']);
+    expect((await put('admin', `/admin/personal/${rosa}/dependencia`, { dependencia_id: '6513e4af-9d27-4d7e-9eb4-aaaaaaaaaaaa' })).status).toBe(404);
+    expect((await put('admin', `/admin/personal/${await idDe(EMAIL.laura)}/dependencia`, { dependencia_id: DEP.archivo })).status).toBe(409); // Laura es solicitante
+
+    await put('admin', `/admin/personal/${rosa}/dependencia`, { dependencia_id: DEP.jefe });
+    expect((await get('admin', '/admin/personal?q=rosa')).body.data[0].roles).toEqual(['Jefe Inmediato']);
+  });
+
+  it('no deja a un jefe elegido en un trámite abierto fuera de su dependencia', async () => {
+    const rosa = await idDe('rosa.ceron@uniautonoma.edu.co');
+    const jefeOriginal = (await db.query('SELECT jefe_inmediato_id FROM solicitudes_paz_y_salvo WHERE id = $1', [SOLICITUD.carlos])).rows[0].jefe_inmediato_id;
+    // los datos del trámite están protegidos por trigger: se asigna el jefe saltándolo solo para preparar la prueba
+    await db.query('ALTER TABLE solicitudes_paz_y_salvo DISABLE TRIGGER USER');
+    await db.query('UPDATE solicitudes_paz_y_salvo SET jefe_inmediato_id = $1 WHERE id = $2', [rosa, SOLICITUD.carlos]);
+    await db.query('ALTER TABLE solicitudes_paz_y_salvo ENABLE TRIGGER USER');
+    const abierto = (await db.query('SELECT estado_global FROM solicitudes_paz_y_salvo WHERE id = $1', [SOLICITUD.carlos])).rows[0].estado_global;
+    expect(['EN_PROCESO', 'AL_DIA', 'PENDIENTE_APROBACION']).toContain(abierto);
+
+    const res = await put('admin', `/admin/personal/${rosa}/dependencia`, { dependencia_id: DEP.medios });
+    expect(res.status).toBe(409);
+    expect(res.body.mensaje).toMatch(/jefe inmediato/);
+    expect((await del('admin', `/admin/personal/${rosa}`)).status).toBe(409);
+
+    await db.query('ALTER TABLE solicitudes_paz_y_salvo DISABLE TRIGGER USER');
+    await db.query('UPDATE solicitudes_paz_y_salvo SET jefe_inmediato_id = $1 WHERE id = $2', [jefeOriginal, SOLICITUD.carlos]);
+    await db.query('ALTER TABLE solicitudes_paz_y_salvo ENABLE TRIGGER USER');
+  });
+
+  it('retira a una persona del personal y vuelve a ser una cuenta sin rol', async () => {
+    const rosa = await idDe('rosa.ceron@uniautonoma.edu.co');
+    expect((await del('admin', `/admin/personal/${rosa}`)).status).toBe(200);
+    expect(Number((await db.query('SELECT COUNT(*) AS n FROM usuario_roles WHERE usuario_id = $1', [rosa])).rows[0].n)).toBe(0);
+    expect(Number((await db.query('SELECT COUNT(*) AS n FROM encargados_dependencia WHERE usuario_id = $1', [rosa])).rows[0].n)).toBe(0);
+    expect((await del('admin', `/admin/personal/${rosa}`)).status).toBe(409);
+  });
+});
