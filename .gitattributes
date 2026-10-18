@@ -1,0 +1,7 @@
+# Normaliza los finales de línea (Windows/macOS/Linux) para evitar diferencias falsas en git
+* text=auto
+*.sql text eol=lf
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary

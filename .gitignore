@@ -1,0 +1,13 @@
+# Dependencias, compilados y secretos (cada subproyecto tiene además su propio .gitignore)
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+# Configuración local de herramientas
+.claude/settings.local.json

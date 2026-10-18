@@ -312,8 +312,12 @@ Las pruebas no necesitan Supabase ni red: levantan la base en memoria con el mis
 - [ ] Cambiar `JWT_SECRET` por un valor aleatorio seguro (`openssl rand -hex 32`)
 - [ ] Configurar `GOOGLE_CLIENT_ID` con el proyecto OAuth de producción
 - [ ] Habilitar RLS en todas las tablas en Supabase
-- [ ] Configurar `CORS_ORIGINS` con el dominio de producción
-- [ ] Ejecutar `npm run setup-db` contra la base de producción
+- [ ] Configurar `CORS_ORIGINS`, `FRONTEND_PUBLIC_URL` y `API_PUBLIC_URL` con los dominios de producción
+- [ ] Definir `NODE_ENV=production`: al arrancar, el backend valida la configuración (secreto JWT, SSL, URLs públicas, contraseñas deshabilitadas) y no inicia si algo falta
+- [ ] Detrás de un proxy o balanceador definir `TRUST_PROXY=1` (el límite de peticiones usa la IP real)
+- [ ] Ejecutar `npm run setup-db -- --solo-maestro` contra la base de producción (con `NODE_ENV=production` el script rechaza `--reset` y los datos ficticios)
+- [ ] Compilar el frontend (`npm run build`) con `VITE_API_URL` y `VITE_GOOGLE_CLIENT_ID` de producción, sin `VITE_ENABLE_PASSWORD_LOGIN` ni `VITE_ENABLE_TEST_ACCOUNTS`, y servir `dist/` con reescritura de rutas a `index.html`
+- [ ] Cambiar la contraseña de la base y el secreto JWT si alguna vez se compartieron en un chat o repositorio
 
 ---
 
