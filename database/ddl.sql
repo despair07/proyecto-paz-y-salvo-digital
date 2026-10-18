@@ -650,10 +650,6 @@ BEGIN
         RAISE EXCEPTION 'Seleccione su jefe inmediato antes de solicitar su paz y salvo'
           USING ERRCODE = 'check_violation';
       END IF;
-      IF NOT v_sol.informe_entrega_cargo THEN
-        RAISE EXCEPTION 'RN-010: el informe por entrega de cargo debe estar completo antes de pedir el paz y salvo del jefe inmediato'
-          USING ERRCODE = 'check_violation';
-      END IF;
     END IF;
     IF v_dep.requiere_enlace AND NEW.enlace IS NULL THEN
       RAISE EXCEPTION 'RN-015: % requiere un enlace (%)', v_dep.nombre, COALESCE(v_dep.etiqueta_enlace, 'adjunto')
