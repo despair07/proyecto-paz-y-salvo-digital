@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
-// Cuentas ficticias de prueba (contraseña común del seed). Solo se muestran con VITE_ENABLE_TEST_ACCOUNTS=true.
-const SHOW_TEST_ACCOUNTS = import.meta.env.VITE_ENABLE_TEST_ACCOUNTS === 'true';
+// Cuentas ficticias de prueba (contraseña común del seed): VITE_ENABLE_PASSWORD_LOGIN y VITE_ENABLE_TEST_ACCOUNTS en true.
+// El acceso con contraseña es solo de desarrollo (el backend también lo exige con AUTH_PASSWORD_ENABLED)
+const PASSWORD_LOGIN = import.meta.env.VITE_ENABLE_PASSWORD_LOGIN === 'true';
+const SHOW_TEST_ACCOUNTS = PASSWORD_LOGIN && import.meta.env.VITE_ENABLE_TEST_ACCOUNTS === 'true';
 const TEST_PASSWORD = 'Demo2026*';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -55,14 +57,14 @@ const TEST_ACCOUNTS = [
     group: 'Encargados de Área (8 dependencias GTH-07)',
     name: 'Andrés Felipe Valencia',
     rol: 'Encargado de Área',
-    dependencia: 'División de Tecnologías de la Información (DTI)',
+    dependencia: 'Tecnologías de la información y transformación digital',
     correo: 'encargado.dti@uniautonoma.edu.co',
   },
   {
     group: 'Encargados de Área (8 dependencias GTH-07)',
     name: 'Juliana Restrepo Gómez',
     rol: 'Encargado de Área',
-    dependencia: 'Medios Educativos',
+    dependencia: 'Medios Educativos (Vicerrectoría Académica)',
     correo: 'encargado.medios@uniautonoma.edu.co',
   },
   {
@@ -83,14 +85,14 @@ const TEST_ACCOUNTS = [
     group: 'Encargados de Área (8 dependencias GTH-07)',
     name: 'Ricardo Alonso Paz',
     rol: 'Encargado de Área',
-    dependencia: 'División Contable y Financiera',
+    dependencia: 'División Contable Y Financiera',
     correo: 'encargado.financiera@uniautonoma.edu.co',
   },
   {
     group: 'Encargados de Área (8 dependencias GTH-07)',
     name: 'Natalia Andrea Ramírez',
     rol: 'Encargado de Área',
-    dependencia: 'Seguridad y Salud en el Trabajo (SST)',
+    dependencia: 'Seguridad y Salud en el Trabajo',
     correo: 'encargado.sst@uniautonoma.edu.co',
   },
   {
@@ -106,7 +108,7 @@ const TEST_ACCOUNTS = [
     group: 'Comunidad Universitaria (Aprobador Final)',
     name: 'Patricia Elena Lasso',
     rol: 'Aprobador Comunidad Universitaria',
-    dependencia: 'División de Comunidad Universitaria (Etapa 3)',
+    dependencia: 'División De Comunidad Universitaria (Etapa 3)',
     correo: 'aprobador.comunidad@uniautonoma.edu.co',
   },
 
@@ -262,62 +264,70 @@ const Login = () => {
                 </span>
                 <h2 className="mt-1 text-2xl font-bold text-[#0A2540]">Iniciar Sesión</h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Acceso exclusivo para personal docente, administrativo, jefaturas y dependencias.
+                  Ingresa con tu cuenta de Google de la universidad (@uniautonoma.edu.co).
                 </p>
               </div>
 
-              <form onSubmit={handleLoginSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                    Correo Institucional
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="usuario@uniautonoma.edu.co"
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#0A2540] focus:bg-white focus:ring-2 focus:ring-[#0A2540]/10"
-                  />
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    Solo dominios @uniautonoma.edu.co
-                  </p>
-                </div>
+              {/* Google Workspace SSO (acceso principal) */}
+              {GOOGLE_CLIENT_ID ? (
+                <div ref={googleButtonRef} className="flex justify-center min-h-[44px]" />
+              ) : (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  El acceso con Google Workspace no está configurado (falta VITE_GOOGLE_CLIENT_ID).
+                </p>
+              )}
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                    Contraseña
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Contraseña"
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#0A2540] focus:bg-white focus:ring-2 focus:ring-[#0A2540]/10"
-                  />
-                </div>
+              <p className="mt-4 text-[11px] text-slate-500 text-center">
+                Si ingresas por primera vez, elegirás tu tipo de vinculación (docente, administrativo o
+                contratista). El personal de las dependencias debe estar registrado por TI.
+              </p>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-xl bg-[#0A2540] py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#133961] disabled:opacity-60"
-                >
-                  {loading ? 'Validando...' : 'Iniciar Sesión'}
-                </button>
-              </form>
-
-
-              {/* Google Workspace SSO */}
-              {GOOGLE_CLIENT_ID && (
+              {/* Acceso con contraseña: solo desarrollo */}
+              {PASSWORD_LOGIN && (
                 <>
                   <div className="relative my-6 text-center">
                     <div className="absolute inset-0 flex items-center">
                       <div className="w-full border-t border-slate-200" />
                     </div>
-                    <span className="relative bg-white px-3 text-xs uppercase font-medium text-slate-400">o</span>
+                    <span className="relative bg-white px-3 text-xs uppercase font-medium text-slate-400">
+                      acceso de desarrollo
+                    </span>
                   </div>
-                  <div ref={googleButtonRef} className="flex justify-center" />
+                  <form onSubmit={handleLoginSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Correo Institucional
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="usuario@uniautonoma.edu.co"
+                        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#0A2540] focus:bg-white focus:ring-2 focus:ring-[#0A2540]/10"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Contraseña
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Contraseña"
+                        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#0A2540] focus:bg-white focus:ring-2 focus:ring-[#0A2540]/10"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full rounded-xl bg-[#0A2540] py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#133961] disabled:opacity-60"
+                    >
+                      {loading ? 'Validando...' : 'Iniciar Sesión'}
+                    </button>
+                  </form>
                 </>
               )}
             </div>

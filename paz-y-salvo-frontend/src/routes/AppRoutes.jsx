@@ -5,6 +5,7 @@ import DashboardArea from '../pages/area-manager/DashboardArea';
 import DashboardApprover from '../pages/approver/DashboardApprover';
 import DashboardAdmin from '../pages/admin/DashboardAdmin';
 import VerifyCertificate from '../pages/certificates/VerifyCertificate';
+import Perfil from '../pages/profile/Perfil';
 import ProtectedRoute from './ProtectedRoute';
 import { useAuth } from '../hooks/useAuth';
 
@@ -23,6 +24,15 @@ const AppRoutes = () => {
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/verificar/:token" element={<VerifyCertificate />} />
+
+        <Route
+          path="/perfil"
+          element={
+            <ProtectedRoute>
+              <Perfil />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/dashboard/usuario"

@@ -1,5 +1,10 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
-import { loginWithPassword as loginWithPasswordRequest, login as loginRequest, me } from '../services/auth.service.js';
+import {
+  loginWithPassword as loginWithPasswordRequest,
+  login as loginRequest,
+  me,
+  updateTipoVinculacion as updateTipoRequest,
+} from '../services/auth.service.js';
 
 export const AuthContext = createContext(null);
 
@@ -24,7 +29,8 @@ function getHomeForUser(user) {
   if (roles.some((role) => ['Docente', 'Administrativo', 'Contratista'].includes(role))) {
     return '/dashboard/usuario';
   }
-  return '/login';
+  // Sin rol: la persona todavía debe elegir su tipo de vinculación
+  return '/perfil';
 }
 
 export function AuthProvider({ children }) {
@@ -78,6 +84,13 @@ export function AuthProvider({ children }) {
     return { ...data, home: userHome };
   }, [setSession]);
 
+  // Elegir o cambiar el tipo de vinculación; el backend devuelve un token con los roles nuevos
+  const updateTipoVinculacion = useCallback(async (tipo, confirmar = false) => {
+    const data = await updateTipoRequest(tipo, confirmar);
+    const userHome = setSession(data.usuario, data.token);
+    return { ...data, home: userHome };
+  }, [setSession]);
+
   const logout = useCallback(() => {
     localStorage.removeItem('pys_token');
     setUser(null);
@@ -91,10 +104,11 @@ export function AuthProvider({ children }) {
       loading,
       login,
       loginWithPassword,
+      updateTipoVinculacion,
       logout,
       hasRole: (roles) => getRolesFromUser(user).some((role) => roles.includes(role)),
     }),
-    [user, home, loading, login, loginWithPassword, logout]
+    [user, home, loading, login, loginWithPassword, updateTipoVinculacion, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

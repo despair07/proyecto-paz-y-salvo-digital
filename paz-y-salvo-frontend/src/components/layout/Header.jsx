@@ -1,5 +1,7 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import NotificationBell from './NotificationBell';
 
 const Header = ({ title }) => {
   const { user, logout } = useAuth();
@@ -18,12 +20,17 @@ const Header = ({ title }) => {
       <div className="flex items-center gap-3">
         <div className="hidden sm:flex flex-col text-right">
           <span className="text-xs font-semibold text-slate-800">{userName}</span>
-          <span className="text-[11px] text-slate-500">{roles[0] || 'Institucional'}</span>
+          <span className="text-[11px] text-slate-500">{roles[0] || 'Sin tipo de vinculación'}</span>
         </div>
 
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A2540] text-sm font-bold text-white shadow-sm">
+        <NotificationBell />
+        <Link
+          to="/perfil"
+          title="Mi perfil"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A2540] text-sm font-bold text-white shadow-sm transition hover:bg-[#133961]"
+        >
           {userName.charAt(0).toUpperCase()}
-        </div>
+        </Link>
 
         <button
           type="button"

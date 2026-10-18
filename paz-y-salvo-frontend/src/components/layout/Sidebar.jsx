@@ -25,6 +25,7 @@ const Sidebar = () => {
     ...(isEncargado ? [{ to: '/dashboard/encargado', label: 'Gestión de Bloqueos', icon: '🔒' }] : []),
     ...(isAprobador ? [{ to: '/dashboard/aprobador', label: 'Aprobación Final', icon: '✅' }] : []),
     ...(isAdmin ? [{ to: '/dashboard/admin', label: 'Administración DTI', icon: '⚙️' }] : []),
+    { to: '/perfil', label: 'Mi perfil', icon: '👤' },
   ];
 
   return (
