@@ -13,6 +13,14 @@ const loginDto = z.object({
   }
 );
 
+const tipoVinculacionDto = z.object({
+  tipo: z.enum(['Docente', 'Administrativo', 'Contratista'], {
+    message: 'El tipo de vinculación debe ser Docente, Administrativo o Contratista',
+  }),
+  confirmar: z.boolean().optional(),
+});
+
 module.exports = {
   loginDto,
+  tipoVinculacionDto,
 };

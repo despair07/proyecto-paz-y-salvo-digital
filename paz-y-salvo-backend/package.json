@@ -10,7 +10,8 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "setup-db": "node scripts/setup-db.js"
+    "setup-db": "node scripts/setup-db.js",
+    "registrar-usuario": "node scripts/registrar-usuario.js"
   },
   "keywords": [],
   "author": "",

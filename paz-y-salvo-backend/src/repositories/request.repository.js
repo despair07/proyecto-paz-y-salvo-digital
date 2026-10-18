@@ -258,8 +258,8 @@ async function insertCertificate(client, { solicitudId, token, hash, archivoUrl,
 // ------------------------------------------------------------------ Catálogos
 async function listDependencias(client) {
   const { rows } = await client.query(
-    `SELECT id, nombre, nombre AS nombre_dependencia, descripcion, etapa, orden,
-            solo_docentes, es_aprobadora_final
+    `SELECT id, nombre, nombre AS nombre_dependencia, descripcion, aspecto, etapa, orden,
+            solo_docentes, aplica_cambio_dependencia, es_aprobadora_final
        FROM dependencias ORDER BY orden`
   );
   return rows;

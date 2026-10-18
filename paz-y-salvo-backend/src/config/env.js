@@ -23,6 +23,10 @@ module.exports = {
     EXPIRES_IN: process.env.JWT_EXPIRES_IN || '24h',
   },
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+  // Dominio de Google Workspace de la universidad (claim `hd` del ID token)
+  GOOGLE_HOSTED_DOMAIN: (process.env.GOOGLE_HOSTED_DOMAIN || 'uniautonoma.edu.co').toLowerCase(),
+  // Solo desarrollo: permite iniciar sesión con correo y contraseña. Nunca en producción.
+  AUTH_PASSWORD_ENABLED: process.env.AUTH_PASSWORD_ENABLED === 'true' && process.env.NODE_ENV !== 'production',
   API_PUBLIC_URL: (process.env.API_PUBLIC_URL || `http://localhost:${positiveInteger(process.env.PORT, 3000)}/api/v1`).replace(/\/$/, ''),
   FRONTEND_PUBLIC_URL: (process.env.FRONTEND_PUBLIC_URL || 'http://localhost:5173').replace(/\/$/, ''),
   CORS_ORIGINS: (process.env.CORS_ORIGINS || 'http://localhost:5173')

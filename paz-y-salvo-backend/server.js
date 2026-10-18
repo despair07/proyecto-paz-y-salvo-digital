@@ -6,7 +6,7 @@ const REQUIRED_TABLES = [
   'roles', 'usuarios', 'usuario_roles', 'dependencias', 'encargados_dependencia',
   'periodos_academicos', 'catalogo_cargos', 'solicitudes_paz_y_salvo',
   'informes_entrega_cargo', 'bloqueos_dependencia', 'entregables_profesorales',
-  'certificados_digitales', 'auditoria',
+  'certificados_digitales', 'auditoria', 'notificaciones',
 ];
 
 // Verifica la conexión a PostgreSQL/Supabase y el estado del esquema, y lo muestra en consola.

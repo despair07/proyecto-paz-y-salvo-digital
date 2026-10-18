@@ -55,6 +55,20 @@ module.exports = {
     return operation(clientFor());
   },
 
+  async withSystemContext(auditReason, operation) {
+    await init();
+    await pg.exec('BEGIN');
+    try {
+      await pg.query("SELECT set_config('app.audit_reason', $1, true)", [String(auditReason || 'Sistema')]);
+      const result = await operation(clientFor());
+      await pg.exec('COMMIT');
+      return result;
+    } catch (error) {
+      await pg.exec('ROLLBACK');
+      throw error;
+    }
+  },
+
   async withUserContext(user, auditReason, operation) {
     await init();
     await pg.exec('BEGIN');

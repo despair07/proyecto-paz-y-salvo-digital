@@ -1,5 +1,5 @@
 const authService = require('../services/auth.service');
-const { loginDto } = require('../dtos/auth.dto');
+const { loginDto, tipoVinculacionDto } = require('../dtos/auth.dto');
 const HttpError = require('../utils/httpError');
 
 class AuthController {
@@ -31,6 +31,24 @@ class AuthController {
       });
     } catch (error) {
       next(error);
+    }
+  }
+
+  async updateTipoVinculacion(req, res, next) {
+    try {
+      const parsedBody = tipoVinculacionDto.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({
+          error: true,
+          codigo: 400,
+          mensaje: parsedBody.error.issues.map((issue) => issue.message).join(', '),
+          detalles: parsedBody.error.issues,
+        });
+      }
+      const result = await authService.updateTipoVinculacion(req.user, parsedBody.data);
+      return res.status(200).json({ ok: true, token: result.token, usuario: result.user });
+    } catch (error) {
+      return next(error);
     }
   }
 

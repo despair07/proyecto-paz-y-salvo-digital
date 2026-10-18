@@ -5,6 +5,7 @@
 
 process.env.JWT_SECRET = 'test-secret-that-is-at-least-thirty-two-bytes-long';
 process.env.FRONTEND_PUBLIC_URL = 'http://localhost:5173';
+process.env.AUTH_PASSWORD_ENABLED = 'true';
 
 jest.mock('../src/config/database', () => require('./helpers/pgliteDatabase'));
 
@@ -114,7 +115,7 @@ describe('Estado del trabajador (RF-004, RN-001, RN-007)', () => {
       puedeDescargarCertificado: false,
     });
     const bloqueadas = data.dependencias.filter((d) => d.estado === 'BLOQUEADO').map((d) => d.nombre);
-    expect(bloqueadas).toEqual(expect.arrayContaining(['Medios Educativos', 'División Contable y Financiera', 'Centro de Desarrollo Profesoral']));
+    expect(bloqueadas).toEqual(expect.arrayContaining(['Medios Educativos (Vicerrectoría Académica)', 'División Contable Y Financiera', 'Centro de Desarrollo Profesoral']));
     const profesoral = data.dependencias.find((d) => d.nombre === 'Centro de Desarrollo Profesoral');
     expect(profesoral.entregablesProfesorales).toMatchObject({ planes_aula: true, informes_ejecucion: false });
   });
@@ -410,10 +411,23 @@ describe('Habilitación del trámite (RF-009)', () => {
 });
 
 describe('Catálogos y administración (RN-011)', () => {
-  it('lista las 9 dependencias en orden', async () => {
+  it('lista las 9 dependencias con los nombres originales del formato GTH-07', async () => {
     const res = await request(app).get(`${API}/dependencias`).set(await as(EMAIL.laura));
     expect(res.body.data).toHaveLength(9);
-    expect(res.body.data[0].nombre).toBe('Jefe Inmediato');
+    expect(res.body.data.map((d) => d.nombre)).toEqual([
+      'Jefe Inmediato',
+      'Tecnologías de la información y transformación digital',
+      'Medios Educativos (Vicerrectoría Académica)',
+      'Almacén',
+      'Archivo y Correspondencia',
+      'División Contable Y Financiera',
+      'Seguridad y Salud en el Trabajo',
+      'Centro de Desarrollo Profesoral',
+      'División De Comunidad Universitaria',
+    ]);
+    const sst = res.body.data.find((d) => d.nombre === 'Seguridad y Salud en el Trabajo');
+    expect(sst).toMatchObject({ aplica_cambio_dependencia: false, aspecto: expect.stringMatching(/exámenes médicos por retiro/) });
+    expect(res.body.data.find((d) => d.nombre === 'Almacén').aspecto).toBe('Recibí los elementos asignados por inventario');
   });
 
   it('el encargado busca trabajadores con trámite en curso', async () => {

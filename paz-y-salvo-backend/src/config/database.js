@@ -52,6 +52,31 @@ class Database {
     }
   }
 
+  // Operaciones sin sesión de usuario (p. ej. el autoregistro al iniciar sesión con Google):
+  // transacción que solo deja el motivo para la tabla `auditoria`.
+  async withSystemContext(auditReason, operation) {
+    if (typeof operation !== 'function') {
+      throw new TypeError('La operación de base de datos no es válida');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('app.audit_reason', $1, true)", [String(auditReason || 'Sistema')]);
+      const result = await operation(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('PostgreSQL transaction rollback failed', rollbackError.code || 'unknown');
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // Escrituras: transacción con el usuario y el motivo disponibles para la tabla `auditoria`
   // (app.user_id y app.audit_reason, leídos por fn_trg_auditar). El backend usa el rol del pool
   // (postgres, BYPASSRLS); RLS queda activo en las tablas para bloquear la API REST de Supabase.
