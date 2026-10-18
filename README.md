@@ -10,7 +10,7 @@ Sistema institucional para tramitar la liquidación de personal (paz y salvo) de
 ```
 paz y salvo/
 ├── database/
-│   ├── ddl.sql               ← DDL canónico v2.0: 13 tablas, triggers de reglas, vistas, RLS
+│   ├── ddl.sql               ← DDL canónico v2.1: 14 tablas, triggers de reglas, vistas, RLS
 │   ├── seed_maestro.sql      ← catálogos: 7 roles, 9 dependencias, 17 cargos, periodo 2026-2
 │   ├── seed_demo.sql         ← 15 usuarios y 5 trámites ficticios en distintos estados
 │   └── PROPUESTAS_CAMBIO_BD.md ← historial de decisiones de diseño de la BD
@@ -75,7 +75,26 @@ La interfaz quedará en: **http://localhost:5173**
 
 ---
 
-## 🔑 Credenciales de prueba (datos ficticios)
+## 🔐 Inicio de sesión
+
+El acceso es **solo con Google Workspace** (cuentas `@uniautonoma.edu.co`; el backend exige el claim `hd` del dominio):
+
+- **Docentes, administrativos y contratistas** entran libremente. Al primer ingreso quedan registrados *sin verificar* y sin rol, y eligen su **tipo de vinculación** en `/perfil`. Pueden cambiarlo después con confirmación, notificación a la persona y a TI, y solo sin un trámite en curso (RN-012).
+- **Jefe inmediato, encargados de área, aprobador y administrador DTI** deben estar registrados por TI. Hasta que exista el panel de TI se dan de alta con:
+
+  ```powershell
+  cd paz-y-salvo-backend
+  npm run registrar-usuario -- ana.perez@uniautonoma.edu.co "Ana Pérez" admin
+  npm run registrar-usuario -- luis.diaz@uniautonoma.edu.co "Luis Díaz" encargado almacen
+  ```
+
+  (roles: `jefe`, `encargado`, `aprobador`, `admin`).
+- Las notificaciones (campana del encabezado) son dentro del sistema.
+- Para que el botón de Google funcione en local, el origen `http://localhost:5173` debe estar autorizado en el cliente OAuth de Google Cloud.
+
+## 🔑 Credenciales de prueba (solo desarrollo)
+
+Con `AUTH_PASSWORD_ENABLED=true` (backend) y `VITE_ENABLE_PASSWORD_LOGIN=true` (frontend) se puede entrar con los usuarios ficticios del seed. Nunca en producción.
 
 > Contraseña única para todos: **`Demo2026*`**
 
@@ -142,7 +161,7 @@ Todo se persiste en Supabase: no hay modo demo ni datos en memoria. Las reglas d
 
 ## 🗄️ Base de datos
 
-### 13 tablas (DDL v2.0 — 3FN)
+### 14 tablas (DDL v2.1 — 3FN)
 
 | # | Tabla | Propósito |
 |---|-------|-----------|
@@ -159,6 +178,7 @@ Todo se persiste en Supabase: no hay modo demo ni datos en memoria. Las reglas d
 | 11 | `entregables_profesorales` | 3 criterios docentes (RN-007) |
 | 12 | `certificados_digitales` | Token QR + hash SHA-256 (RN-006) |
 | 13 | `auditoria` | Historial de cambios (quién, cuándo, por qué, antes/después) |
+| 14 | `notificaciones` | Avisos dentro del sistema (por usuario, leída / no leída) |
 
 Vistas: `v_resumen_paz_y_salvo` (resumen por trámite) y `v_estado_dependencias_solicitud` (grid de dependencias).
 
@@ -178,7 +198,7 @@ npm run setup-db -- --solo-maestro  # solo catálogos, sin datos ficticios
 
 1. Ve a **https://supabase.com/dashboard** → tu proyecto → **SQL Editor**
 2. Ejecuta en orden (cada uno es un script completo):
-   - `database/ddl.sql` → ⚠ **elimina y recrea** las 13 tablas, triggers, vistas y RLS
+   - `database/ddl.sql` → ⚠ **elimina y recrea** las 14 tablas, triggers, vistas y RLS
    - `database/seed_maestro.sql` → roles, dependencias, cargos y periodo activo
    - `database/seed_demo.sql` → usuarios y trámites ficticios (contraseña `Demo2026*`)
 
@@ -203,6 +223,10 @@ JWT_EXPIRES_IN=24h
 
 # Google OAuth (mismo Web Client ID que el frontend)
 GOOGLE_CLIENT_ID=<tu_client_id>
+GOOGLE_HOSTED_DOMAIN=uniautonoma.edu.co
+
+# Solo desarrollo (login con contraseña de los usuarios del seed). En producción: false
+AUTH_PASSWORD_ENABLED=false
 
 # URLs
 API_PUBLIC_URL=http://localhost:3000/api/v1
@@ -225,6 +249,7 @@ npm test
 | Archivo | Cubre |
 |---------|-------|
 | `tests/api.integration.test.js` | 40+ casos sobre PostgreSQL real (PGlite con `ddl.sql` y los seeds): login, estado, bloqueos, RN-001…RN-011, informe, aprobación, certificado QR, catálogos |
+| `tests/auth.google.test.js` | Login con Google (claim `hd`), autoregistro, tipo de vinculación (RN-012) y notificaciones |
 | `tests/auth.middleware.test.js` | JWT válido, inválido y sin token |
 | `tests/areaScope.middleware.test.js` | RN-004 aislamiento por dependencia |
 | `tests/pdf.service.test.js` | Generación PDF con `pdf-lib` y QR embebido |
@@ -249,6 +274,7 @@ Las pruebas no necesitan Supabase ni red: levantan la base en memoria con el mis
 | **RN-009** | Motivo obligatorio en todo veredicto de bloqueo |
 | **RN-010** | Informe de entrega de cargo (8 secciones) requerido para aprobar |
 | **RN-011** | Admin DTI solo puede editar el nombre del cargo en el catálogo |
+| **RN-012** | El tipo de vinculación (docente / administrativo / contratista) no se cambia con un trámite en curso; el cambio se confirma y se notifica |
 
 ---
 

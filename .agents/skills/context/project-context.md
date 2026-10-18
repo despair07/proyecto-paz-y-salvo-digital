@@ -59,7 +59,8 @@ Web responsive (desktop prioritario para encargados y aprobador; móvil para con
 
 | Ruta | Propósito | Roles |
 |---|---|---|
-| `/login` | Login institucional (correo/contraseña, Google SSO, accesos demo por rol) | Todos |
+| `/login` | Login con Google Workspace (contraseña solo en desarrollo) | Todos |
+| `/perfil` | Elegir o cambiar el tipo de vinculación (RN-012), datos de la cuenta | Cualquier sesión |
 | `/dashboard/usuario` | Estado global + grid de dependencias + informe de entrega | Docente, Administrativo, Contratista |
 | `/dashboard/encargado` | Gestión de bloqueos del área / validación del informe | Encargado de Área, Jefe Inmediato |
 | `/dashboard/aprobador` | Trámites pendientes de aprobación final | Aprobador Comunidad Universitaria |

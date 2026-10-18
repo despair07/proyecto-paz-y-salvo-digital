@@ -23,7 +23,8 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 ## Autenticación y autorización
 
-- Login propio con JWT (`auth.service.js`, expira con `JWT_EXPIRES_IN`) y Google SSO (dominio `uniautonoma.edu.co`).
+- Login solo con Google Workspace: se verifica el ID token, `email_verified` y el claim `hd` (`GOOGLE_HOSTED_DOMAIN`); la cuenta queda ligada a `google_sub`. Sesión con JWT (`JWT_EXPIRES_IN`).
+- Autoregistro: quien no está en la base se crea como `AUTOREGISTRO` sin verificar y sin rol; los roles de área solo los asigna TI. `AUTH_PASSWORD_ENABLED` es solo de desarrollo y se ignora con `NODE_ENV=production`.
 - Roles verificados en backend con `rbac.middleware`; el aislamiento por dependencia (RN-004) con `areaScope.middleware`.
 - Estado actual: el token se guarda en `localStorage` (`pys_token`). Riesgo ante XSS: no renderizar HTML sin sanitizar; evaluar cookie httpOnly (PYS-T03).
 - La verificación pública de certificados (`/certificados/verificar/:token`) no requiere login: no exponer más datos personales de los necesarios.
