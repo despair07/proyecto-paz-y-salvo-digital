@@ -22,7 +22,7 @@ const Sidebar = () => {
 
   const links = [
     ...(isWorker ? [{ to: '/dashboard/usuario', label: 'Mi Paz y Salvo', icon: '📄' }] : []),
-    ...(isEncargado ? [{ to: '/dashboard/encargado', label: 'Gestión de Bloqueos', icon: '🔒' }] : []),
+    ...(isEncargado ? [{ to: '/dashboard/encargado', label: 'Bandeja de revisión', icon: '🔒' }] : []),
     ...(isAprobador ? [{ to: '/dashboard/aprobador', label: 'Aprobación Final', icon: '✅' }] : []),
     ...(isAdmin ? [{ to: '/dashboard/admin', label: 'Administración DTI', icon: '⚙️' }] : []),
     { to: '/perfil', label: 'Mi perfil', icon: '👤' },

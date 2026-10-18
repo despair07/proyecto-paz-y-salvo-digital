@@ -1,632 +1,460 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
+import ReviewState, { CATEGORIAS_BLOQUEO } from '../../components/common/ReviewState';
+import InformeForm from '../../components/informe/InformeForm';
 import { useAuth } from '../../hooks/useAuth';
-import api from '../../services/api';
+import {
+  aprobarRevision, bloquearRevision, getRevision, listRevisiones, saveEntregables,
+} from '../../services/tramite.service';
+import { formatearFecha, mensajeError } from '../../utils/errors';
 
-const CATEGORIES = [
-  { value: 'FINANCIERO', label: 'Financiero (anticipos, préstamos, saldos)' },
-  { value: 'INVENTARIO_ELEMENTOS', label: 'Inventario / Elementos (activos fijos, equipos)' },
-  { value: 'DOCUMENTAL_ENTREGABLES', label: 'Documental / Entregables (archivos, informes)' },
-  { value: 'ACADEMICO_PROFESORAL', label: 'Académico / Profesoral (planes de aula, notas)' },
+const FILTROS = [
+  { id: 'SOLICITADA', texto: 'En revisión' },
+  { id: 'BLOQUEADA', texto: 'Bloqueadas' },
+  { id: 'APROBADA', texto: 'Aprobadas' },
+  { id: '', texto: 'Todas' },
 ];
 
-const DashboardArea = () => {
-  const { user } = useAuth();
-  const [locks, setLocks] = useState([]);
-  const [loading, setLoading] = useState(true);
+const ENTREGABLES = [
+  ['innovaciones_educativas', 'Innovaciones educativas'],
+  ['planes_aula', 'Planes de aula'],
+  ['informes_ejecucion', 'Informes de ejecución'],
+];
+
+const CATEGORIA_POR_DEFECTO = (r) => (r.soloDocentes ? 'ACADEMICO_PROFESORAL' : 'INVENTARIO_ELEMENTOS');
+
+// ------------------------------------------------------------------ detalle y decisión
+const Detalle = ({ id, onVolver, onDecidido, notificar }) => {
+  const [r, setR] = useState(null);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [recibi, setRecibi] = useState('');
+  const [modo, setModo] = useState(null); // 'bloquear'
+  const [categoria, setCategoria] = useState('INVENTARIO_ELEMENTOS');
+  const [motivo, setMotivo] = useState('');
+  const [procesando, setProcesando] = useState(false);
+  const [verInforme, setVerInforme] = useState(false);
+  const [guardandoEntregable, setGuardandoEntregable] = useState(false);
 
-  // Filtros
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('TODOS');
-
-  // Modal Crear Bloqueo
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [usersList, setUsersList] = useState([]);
-  const [selectedUserForLock, setSelectedUserForLock] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].value);
-  const [lockMotivo, setLockMotivo] = useState('');
-  const [submittingLock, setSubmittingLock] = useState(false);
-
-  // Modal Resolver / Editar Bloqueo
-  const [selectedLockToResolve, setSelectedLockToResolve] = useState(null);
-  const [resolveObservation, setResolveObservation] = useState('');
-  const [resolving, setResolving] = useState(false);
-
-  // Módulo Desarrollo Profesoral (Pantalla 4)
-  const isProfesoral = (user?.correo_institucional || '').includes('profesoral') ||
-    user?.dependencia?.includes('Profesoral') ||
-    user?.roles?.includes('Encargado de Área');
-
-  const [teacherEval, setTeacherEval] = useState({
-    solicitudId: '',
-    docenteNombre: '',
-    planes_aula: false,
-    innovaciones_educativas: false,
-    informes_ejecucion: false,
-    observaciones: '',
-  });
-  const [showTeacherModal, setShowTeacherModal] = useState(false);
-  const [savingTeacher, setSavingTeacher] = useState(false);
-
-  // Carga de bloqueos de su propia dependencia (RN-004)
-  const fetchLocks = async () => {
-    setLoading(true);
-    setError('');
+  const cargar = useCallback(async () => {
+    setCargando(true);
     try {
-      const res = await api.get('/bloqueos', {
-        params: {
-          q: searchTerm,
-          estado: statusFilter === 'TODOS' ? undefined : statusFilter,
-        },
-      });
-      setLocks(res.data.data || []);
+      const detalle = await getRevision(id);
+      setR(detalle);
+      setCategoria(CATEGORIA_POR_DEFECTO(detalle));
+      setError('');
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'Error al cargar bloqueos');
+      setError(mensajeError(err, 'No se pudo cargar la solicitud'));
     } finally {
-      setLoading(false);
+      setCargando(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    fetchLocks();
-  }, [statusFilter]);
+    setRecibi('');
+    setMotivo('');
+    setModo(null);
+    setVerInforme(false);
+    cargar();
+  }, [cargar]);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    fetchLocks();
-  };
-
-  // Cargar lista de usuarios para nuevo bloqueo
-  const handleOpenCreateModal = async () => {
-    setError('');
+  const cambiarEntregable = async (clave, valor) => {
+    setGuardandoEntregable(true);
     try {
-      const res = await api.get('/usuarios', { params: { conTramite: true, limit: 100 } });
-      setUsersList(res.data.data || []);
-      if (res.data.data?.length) {
-        setSelectedUserForLock(res.data.data[0].id);
-      }
-      setShowCreateModal(true);
+      await saveEntregables(r.solicitudId, { [clave]: valor });
+      await cargar();
     } catch (err) {
-      setError('Error al consultar catálogo de usuarios');
-    }
-  };
-
-  const handleCreateLock = async (e) => {
-    e.preventDefault();
-    if (!lockMotivo.trim()) {
-      setError('El motivo del bloqueo es obligatorio (RN-009)');
-      return;
-    }
-
-    setSubmittingLock(true);
-    setError('');
-    try {
-      // El trámite activo del trabajador seleccionado viene del catálogo (conTramite=true)
-      const targetUser = usersList.find((u) => u.id === selectedUserForLock);
-      if (!targetUser?.solicitud_id) {
-        setError('El trabajador seleccionado no tiene un trámite de paz y salvo en curso');
-        return;
-      }
-
-      await api.post('/bloqueos', {
-        solicitudId: targetUser.solicitud_id,
-        dependenciaId: user?.dependencia_id,
-        categoria: selectedCategory,
-        motivo: lockMotivo.trim(),
-      });
-
-      setNotice('Bloqueo registrado exitosamente. Se ha recalculado el estado del trabajador a CON PENDIENTES (RN-001).');
-      setShowCreateModal(false);
-      setLockMotivo('');
-      await fetchLocks();
-    } catch (err) {
-      setError(err.response?.data?.mensaje || 'Error al registrar el bloqueo');
+      setError(mensajeError(err, 'No se pudo guardar el entregable'));
     } finally {
-      setSubmittingLock(false);
+      setGuardandoEntregable(false);
     }
   };
 
-  // RF-003: Levantar bloqueo (marcar RESUELTO)
-  const handleResolveLock = async () => {
-    if (!selectedLockToResolve) return;
-    setResolving(true);
+  const aprobar = async () => {
+    setProcesando(true);
     setError('');
     try {
-      await api.put(`/bloqueos/${selectedLockToResolve.id}`, {
-        estado: 'RESUELTO',
-        observacion: resolveObservation.trim() || 'Bloqueo resuelto y subsanado a satisfacción',
-      });
-
-      setNotice('Bloqueo marcado como RESUELTO. La fila se actualizó a Paz y Salvo.');
-      setSelectedLockToResolve(null);
-      setResolveObservation('');
-      await fetchLocks();
+      const res = await aprobarRevision(id, recibi);
+      notificar(res.mensaje);
+      onDecidido();
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'Error al levantar el bloqueo');
+      setError(mensajeError(err, 'No se pudo aprobar'));
     } finally {
-      setResolving(false);
+      setProcesando(false);
     }
   };
 
-  // Pantalla 4: Cargar evaluación docente
-  const handleOpenTeacherModal = async (solicitudId, docenteNombre) => {
+  const bloquear = async () => {
+    setProcesando(true);
     setError('');
     try {
-      const res = await api.get(`/desarrollo-profesoral/docentes/${solicitudId}`);
-      setTeacherEval({
-        solicitudId,
-        docenteNombre,
-        planes_aula: res.data.data.planes_aula,
-        innovaciones_educativas: res.data.data.innovaciones_educativas,
-        informes_ejecucion: res.data.data.informes_ejecucion,
-        observaciones: res.data.data.observaciones || '',
-      });
-      setShowTeacherModal(true);
+      const res = await bloquearRevision(id, { categoria, motivo });
+      notificar(res.mensaje);
+      onDecidido();
     } catch (err) {
-      setError('Error al consultar entregables profesorales');
-    }
-  };
-
-  const handleSaveTeacherEval = async () => {
-    setSavingTeacher(true);
-    setError('');
-    try {
-      const res = await api.put(`/desarrollo-profesoral/docentes/${teacherEval.solicitudId}`, {
-        planes_aula: teacherEval.planes_aula,
-        innovaciones_educativas: teacherEval.innovaciones_educativas,
-        informes_ejecucion: teacherEval.informes_ejecucion,
-        observaciones: teacherEval.observaciones,
-      });
-
-      setNotice(res.data.mensaje || 'Evaluación docente actualizada');
-      setShowTeacherModal(false);
-      await fetchLocks();
-    } catch (err) {
-      setError(err.response?.data?.mensaje || 'Error al actualizar entregables docentes');
+      setError(mensajeError(err, 'No se pudo bloquear'));
     } finally {
-      setSavingTeacher(false);
+      setProcesando(false);
     }
   };
+
+  if (cargando && !r) return <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Cargando solicitud…</p>;
+  if (!r) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        {error || 'No se encontró la solicitud.'}
+        <button type="button" onClick={onVolver} className="ml-3 font-semibold underline">Volver</button>
+      </div>
+    );
+  }
+
+  const t = r.trabajador;
+  const entregables = r.entregables || {};
 
   return (
-    <Layout title="Portal del Encargado de Área / Jefatura">
-      <div className="space-y-6">
-        {/* Notificaciones */}
-        {notice && (
-          <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-800 shadow-sm">
-            <span>✓ {notice}</span>
-            <button onClick={() => setNotice('')} className="text-green-600 font-bold">✕</button>
+    <div className="space-y-4">
+      <button type="button" onClick={onVolver} className="text-xs font-semibold text-[#0A2540] hover:underline lg:hidden">← Volver a la bandeja</button>
+
+      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#D97706]">{r.dependencia}</p>
+            <h2 className="text-lg font-bold text-[#0A2540]">{t.nombre}</h2>
           </div>
-        )}
-
-        {error && (
-          <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 shadow-sm">
-            <span>⚠️ {error}</span>
-            <button onClick={() => setError('')} className="text-red-600 font-bold">✕</button>
-          </div>
-        )}
-
-        {/* Header y Filtros (Pantalla 3) */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-card">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#D97706]">
-                Dependencia Asignada (RN-004)
-              </span>
-              <h2 className="text-xl font-bold text-[#0A2540]">
-                {user?.dependencia || 'Gestión de Paz y Salvo'}
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Solo administra los bloqueos pertenecientes a su propia dependencia.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleOpenCreateModal}
-                className="rounded-xl bg-[#0A2540] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#133961] flex items-center gap-2"
-              >
-                <span>➕</span>
-                <span>Registrar Nuevo Bloqueo (RF-002)</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Barra de búsqueda y selector de estado */}
-          <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <form onSubmit={handleSearch} className="w-full sm:w-80 flex items-center gap-2">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por cédula o correo..."
-                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0A2540] focus:bg-white"
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
-              >
-                Buscar
-              </button>
-            </form>
-
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <span className="text-xs font-semibold text-slate-500">Filtrar estado:</span>
-              <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs">
-                {['TODOS', 'BLOQUEADO', 'RESUELTO'].map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStatusFilter(st)}
-                    className={`px-3 py-1 rounded-lg font-bold transition ${
-                      statusFilter === st
-                        ? 'bg-white text-[#0A2540] shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {st === 'TODOS' ? 'Todos' : st === 'BLOQUEADO' ? 'Bloqueados' : 'Paz y Salvo'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <ReviewState estado={r.estado} />
         </div>
 
-        {/* Módulo Pantalla 4: Acceso a Centro de Desarrollo Profesoral */}
-        {isProfesoral && (
-          <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/40 p-5 shadow-sm flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <span className="rounded bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900 uppercase tracking-wide">
-                Pantalla 4 · Desarrollo Profesoral
-              </span>
-              <h3 className="text-base font-bold text-[#0A2540] mt-1">
-                Validación de Entregables Docentes (RN-007)
-              </h3>
-              <p className="text-xs text-slate-600">
-                Evalúe los 3 criterios obligatorios (Planes de Aula, Innovaciones Educativas e Informes de Ejecución).
-              </p>
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          {[
+            ['Documento', t.documento],
+            ['Lugar de expedición', r.trabajadorDetalle.lugarExpedicion],
+            ['Cargo', t.cargo],
+            ['Vinculación', t.vinculacion],
+            ['Correo', t.correo],
+            ['Tipo de novedad', t.novedad === 'RETIRO' ? `Retiro${t.fechaRetiro ? ` · ${formatearFecha(t.fechaRetiro)}` : ''}` : 'Cambio de dependencia'],
+            ['Solicitada', `${formatearFecha(r.solicitadaEl, { hora: true })}${r.intentos > 1 ? ` · intento ${r.intentos}` : ''}`],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{k}</dt>
+              <dd className="mt-0.5 break-words text-slate-800">{v || '—'}</dd>
             </div>
-            <button
-              type="button"
-              onClick={() => handleOpenTeacherModal('aaaa1111-1111-4111-8111-111111111111', 'Laura Marcela Ortiz Peña')}
-              className="rounded-xl bg-[#D97706] px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-amber-700"
-            >
-              Evaluar Entregables de Laura Ortiz (Docente) →
-            </button>
-          </div>
+          ))}
+        </dl>
+        {t.verificado === false && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+            ⚠ Esta persona se autoregistró y TI aún no ha verificado su vinculación con la universidad.
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Aspecto sobre el que se da paz y salvo</h3>
+        <p className="mt-1.5 text-sm text-slate-800">{r.aspecto || 'Aprobación de la dependencia.'}</p>
+
+        {r.requiereEnlace && (
+          <p className="mt-3 text-sm text-slate-800">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{r.etiquetaEnlace || 'Enlace'}: </span>
+            {r.enlace ? (
+              <a href={r.enlace} target="_blank" rel="noopener noreferrer" className="break-all font-semibold text-[#0A2540] underline underline-offset-2">
+                {r.enlace}
+              </a>
+            ) : '—'}
+          </p>
         )}
 
-        {/* Tabla de Bloqueos de la Dependencia (Pantalla 3) */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#0A2540] text-white uppercase text-[10px] tracking-wider font-semibold">
-                <tr>
-                  <th className="px-5 py-3.5">Trabajador</th>
-                  <th className="px-5 py-3.5">Cargo y Novedad</th>
-                  <th className="px-5 py-3.5">Categoría (RN-003)</th>
-                  <th className="px-5 py-3.5">Motivo del Bloqueo</th>
-                  <th className="px-5 py-3.5">Estado</th>
-                  <th className="px-5 py-3.5 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-400">
-                      Cargando registros de la dependencia...
-                    </td>
-                  </tr>
-                ) : locks.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-400">
-                      No se registran bloqueos con los filtros seleccionados.
-                    </td>
-                  </tr>
-                ) : (
-                  locks.map((lock) => {
-                    const isBlocked = lock.estado === 'BLOQUEADO';
-                    return (
-                      <tr key={lock.id} className="hover:bg-slate-50/80 transition">
-                        <td className="px-5 py-4">
-                          <p className="font-bold text-slate-900">{lock.trabajador_nombre}</p>
-                          <p className="text-[11px] text-slate-500 font-mono">{lock.numero_documento}</p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <p className="font-semibold text-slate-800">{lock.cargo_desempenado || 'Funcionario'}</p>
-                          <span className="inline-block mt-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 font-medium">
-                            {lock.tipo_novedad || 'Retiro'}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className="font-mono text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                            {lock.categoria}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 max-w-xs">
-                          <p className="text-slate-800 line-clamp-2">{lock.motivo || lock.motivo_descripcion}</p>
-                          {lock.observacion && (
-                            <p className="text-[10px] text-green-700 mt-1 font-medium">
-                              ✓ {lock.observacion}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${
-                              isBlocked ? 'badge-blocked' : 'badge-approved'
-                            }`}
-                          >
-                            <span>{isBlocked ? '✕' : '✓'}</span>
-                            <span>{isBlocked ? 'Bloqueado' : 'Paz y Salvo'}</span>
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          {isBlocked ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedLockToResolve(lock);
-                                setResolveObservation('');
-                              }}
-                              className="rounded-lg bg-[#16A34A] px-3 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-green-700"
-                            >
-                              Levantar Bloqueo (RF-003)
-                            </button>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 font-medium">
-                              Resuelto ({new Date(lock.fecha_resolucion || lock.fecha_registro).toLocaleDateString()})
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+        {r.soloDocentes && (
+          <fieldset className="mt-4" disabled={!r.puedeDecidir || guardandoEntregable}>
+            <legend className="text-xs font-bold uppercase tracking-wider text-slate-500">Entregables del docente (una sola persona los revisa)</legend>
+            <ul className="mt-2 space-y-2">
+              {ENTREGABLES.map(([clave, texto]) => (
+                <li key={clave}>
+                  <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(entregables[clave])}
+                      onChange={(e) => cambiarEntregable(clave, e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <span className="font-semibold text-slate-800">{texto}</span>
+                    <span className="ml-auto text-xs text-slate-500">{entregables[clave] ? 'Aprobado' : 'Pendiente'}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-slate-500">Para aprobar la solicitud deben estar los tres aprobados; si falta alguno, bloquéala con el motivo.</p>
+          </fieldset>
+        )}
+      </section>
+
+      {r.estado === 'BLOQUEADA' && (
+        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-900">
+          <p className="font-bold">Bloqueada · {CATEGORIAS_BLOQUEO[r.categoriaBloqueo] || r.categoriaBloqueo}</p>
+          <p className="mt-1">{r.motivoBloqueo}</p>
+          <p className="mt-2 text-xs text-rose-700">Esperando que el trabajador corrija y solicite de nuevo.</p>
+        </section>
+      )}
+
+      {r.estado === 'APROBADA' && (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
+          <p className="font-bold">Aprobada el {formatearFecha(r.fechaRevision, { hora: true })}</p>
+          <p className="mt-1"><strong>Recibí / Revisé:</strong> {r.recibi}</p>
+        </section>
+      )}
+
+      {r.puedeDecidir && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+          {!r.tieneFirma && (
+            <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              Para aprobar necesitas tu firma guardada. <Link to="/perfil" className="font-bold underline">Dibújala en Mi perfil</Link> y vuelve.
+            </p>
+          )}
+
+          {modo !== 'bloquear' ? (
+            <>
+              <label htmlFor="recibi" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Recibí / Revisé <span className="text-red-600" aria-hidden="true">*</span>
+              </label>
+              <textarea
+                id="recibi"
+                rows={3}
+                value={recibi}
+                onChange={(e) => setRecibi(e.target.value)}
+                maxLength={1000}
+                placeholder="Escribe lo que recibiste o verificaste (p. ej. «Recibí portátil #123 y accesos revocados»)"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0A2540] focus:ring-2 focus:ring-[#0A2540]/10"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">Se guardará con tu nombre, la fecha y tu firma, y la verá Comunidad Universitaria.</p>
+              <div className="mt-4 flex flex-wrap justify-end gap-3">
+                <button type="button" onClick={() => setModo('bloquear')} className="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50">
+                  Bloquear…
+                </button>
+                <button
+                  type="button"
+                  onClick={aprobar}
+                  disabled={procesando || recibi.trim().length < 3 || !r.tieneFirma || (r.soloDocentes && !entregables.completo)}
+                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {procesando ? 'Aprobando…' : 'Aprobar y firmar'}
+                </button>
+              </div>
+              {r.soloDocentes && !entregables.completo && (
+                <p className="mt-2 text-right text-xs text-slate-500">Marca los tres entregables como aprobados para poder aprobar.</p>
+              )}
+            </>
+          ) : (
+            <>
+              <h3 className="text-sm font-bold text-rose-800">Bloquear la solicitud</h3>
+              <div className="mt-3 grid gap-3">
+                <div>
+                  <label htmlFor="categoria" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">Categoría</label>
+                  <select id="categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                    {Object.entries(CATEGORIAS_BLOQUEO).map(([valor, texto]) => <option key={valor} value={valor}>{texto}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="motivo" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Motivo <span className="text-red-600" aria-hidden="true">*</span>
+                  </label>
+                  <textarea
+                    id="motivo"
+                    rows={3}
+                    value={motivo}
+                    onChange={(e) => setMotivo(e.target.value)}
+                    maxLength={1000}
+                    placeholder="Explica qué debe corregir o entregar el trabajador"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0A2540] focus:ring-2 focus:ring-[#0A2540]/10"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap justify-end gap-3">
+                <button type="button" onClick={() => setModo(null)} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</button>
+                <button
+                  type="button"
+                  onClick={bloquear}
+                  disabled={procesando || motivo.trim().length < 5}
+                  className="rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {procesando ? 'Bloqueando…' : 'Confirmar bloqueo'}
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {r.historial?.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Historial de bloqueos de tu dependencia</h3>
+          <ul className="mt-2 space-y-2">
+            {r.historial.map((b) => (
+              <li key={b.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs">
+                <p className="font-semibold text-slate-800">{CATEGORIAS_BLOQUEO[b.categoria]} · {b.motivo}</p>
+                <p className="mt-0.5 text-slate-500">
+                  {formatearFecha(b.fecha_registro, { hora: true })}
+                  {b.estado === 'RESUELTO' ? ` · resuelto: ${b.observacion || 'sí'}` : ' · activo'}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {r.informe && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <button
+            type="button"
+            onClick={() => setVerInforme((v) => !v)}
+            aria-expanded={verInforme}
+            className="flex w-full items-center justify-between text-left text-sm font-bold text-[#0A2540]"
+          >
+            <span>Informe por entrega de cargo (solo lectura){r.informe.estado === 'COMPLETO' ? ' · completo' : ' · en borrador'}</span>
+            <span aria-hidden="true">{verInforme ? '▲' : '▼'}</span>
+          </button>
+          {verInforme && (
+            <div className="mt-4">
+              <InformeForm secciones={r.informe.secciones} readOnly compacto />
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+};
+
+// ------------------------------------------------------------------ bandeja
+const DashboardArea = () => {
+  const { user } = useAuth();
+  const [filtro, setFiltro] = useState('SOLICITADA');
+  const [q, setQ] = useState('');
+  const [busqueda, setBusqueda] = useState('');
+  const [lista, setLista] = useState([]);
+  const [conteos, setConteos] = useState({});
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
+  const [seleccion, setSeleccion] = useState(null);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    try {
+      const res = await listRevisiones({ estado: filtro || undefined, q: busqueda || undefined, limit: 50 });
+      setLista(res.data);
+      setConteos(res.conteos);
+      setError('');
+    } catch (err) {
+      setError(mensajeError(err, 'No se pudo cargar la bandeja'));
+    } finally {
+      setCargando(false);
+    }
+  }, [filtro, busqueda]);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  return (
+    <Layout title="Bandeja de revisión">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#D97706]">{user?.dependencia || 'Dependencia'}</p>
+          <h2 className="text-lg font-bold text-[#0A2540]">Solicitudes de paz y salvo que debes revisar</h2>
+          <p className="mt-1 text-xs text-slate-600">
+            Revisa los datos, aprueba con tu «Recibí» y tu firma, o bloquea indicando el motivo. Quien lo solicitó verá el estado «En proceso» hasta que decidas.
+          </p>
+        </div>
+
+        {aviso && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm font-semibold text-emerald-800">✓ {aviso}</div>}
+        {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-semibold text-red-700">{error}</div>}
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(320px,400px)_1fr]">
+          <div className={seleccion ? 'hidden lg:block' : ''}>
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtro por estado">
+              {FILTROS.map((f) => (
+                <button
+                  key={f.id || 'todas'}
+                  type="button"
+                  role="tab"
+                  aria-selected={filtro === f.id}
+                  onClick={() => setFiltro(f.id)}
+                  className={`rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+                    filtro === f.id ? 'border-[#0A2540] bg-[#0A2540] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {f.texto}{f.id ? ` (${conteos[f.id] ?? 0})` : ''}
+                </button>
+              ))}
+            </div>
+
+            <form
+              className="mt-3 flex gap-2"
+              onSubmit={(e) => { e.preventDefault(); setBusqueda(q.trim()); }}
+              role="search"
+            >
+              <label htmlFor="buscar" className="sr-only">Buscar por nombre, cédula o correo</label>
+              <input
+                id="buscar"
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Nombre, cédula o correo"
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#0A2540] focus:ring-2 focus:ring-[#0A2540]/10"
+              />
+              <button type="submit" className="rounded-xl bg-[#0A2540] px-4 py-2 text-sm font-bold text-white hover:bg-[#133961]">Buscar</button>
+            </form>
+
+            <ul className="mt-3 space-y-2">
+              {cargando && <li className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Cargando…</li>}
+              {!cargando && lista.length === 0 && (
+                <li className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                  No hay solicitudes en esta vista.
+                </li>
+              )}
+              {lista.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSeleccion(item.id)}
+                    aria-current={seleccion === item.id}
+                    className={`w-full rounded-xl border bg-white p-3.5 text-left transition hover:bg-slate-50 ${
+                      seleccion === item.id ? 'border-[#0A2540] ring-1 ring-[#0A2540]' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-bold text-[#0A2540]">{item.trabajador.nombre}</p>
+                      <ReviewState estado={item.estado} />
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-600">{item.trabajador.cargo} · {item.trabajador.vinculacion}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {item.dependencia} · solicitada {formatearFecha(item.solicitadaEl)}
+                      {item.intentos > 1 ? ` · intento ${item.intentos}` : ''}
+                      {item.trabajador.verificado === false ? ' · sin verificar' : ''}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className={seleccion ? '' : 'hidden lg:block'}>
+            {seleccion ? (
+              <Detalle
+                key={seleccion}
+                id={seleccion}
+                onVolver={() => setSeleccion(null)}
+                notificar={(m) => { setAviso(m); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                onDecidido={() => { setSeleccion(null); cargar(); }}
+              />
+            ) : (
+              <div className="flex h-full min-h-[240px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+                Selecciona una solicitud de la bandeja para ver los datos del trabajador y decidir.
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Modal Registrar Bloqueo (RF-002) */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-modal">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-lg font-bold text-[#0A2540]">Registrar Nuevo Bloqueo (RF-002)</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 font-bold text-lg">✕</button>
-            </div>
-
-            <form onSubmit={handleCreateLock} className="space-y-4 my-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Seleccionar Trabajador
-                </label>
-                <select
-                  value={selectedUserForLock}
-                  onChange={(e) => setSelectedUserForLock(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-800 outline-none focus:border-[#0A2540]"
-                >
-                  {usersList.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nombres} {u.apellidos} — {u.numero_documento} ({u.tipo_vinculacion})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Categoría Obligatoria (RN-003)
-                </label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-800 outline-none focus:border-[#0A2540]"
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Causa / Motivo del Bloqueo (RN-009 Obligatorio)
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={lockMotivo}
-                  onChange={(e) => setLockMotivo(e.target.value)}
-                  placeholder="Detalle exactamente la causa del pendiente o elemento sin devolver..."
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-800 outline-none focus:border-[#0A2540]"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingLock}
-                  className="rounded-xl bg-[#DC2626] px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
-                >
-                  {submittingLock ? 'Guardando...' : 'Guardar Bloqueo'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Levantar Bloqueo (RF-003) */}
-      {selectedLockToResolve && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-modal">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-[#0A2540]">Levantar Bloqueo y Marcar Paz y Salvo</h3>
-              <button onClick={() => setSelectedLockToResolve(null)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <div className="my-4 space-y-3">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                <p className="font-bold text-slate-800">{selectedLockToResolve.trabajador_nombre}</p>
-                <p className="text-slate-600 mt-1">{selectedLockToResolve.motivo}</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Observación de Resolución (Opcional):
-                </label>
-                <textarea
-                  rows={2}
-                  value={resolveObservation}
-                  onChange={(e) => setResolveObservation(e.target.value)}
-                  placeholder="Ej: Material bibliográfico devuelto a entera satisfacción en biblioteca central..."
-                  className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-800 outline-none focus:border-[#16A34A]"
-                />
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedLockToResolve(null)}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleResolveLock}
-                disabled={resolving}
-                className="rounded-xl bg-[#16A34A] px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-green-700"
-              >
-                {resolving ? 'Procesando...' : 'Confirmar y Marcar Paz y Salvo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Pantalla 4: Centro de Desarrollo Profesoral (Checklist 3 ítems RN-007) */}
-      {showTeacherModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-modal">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#D97706]">
-                  Pantalla 4 · GTH-07 Página 2
-                </span>
-                <h3 className="text-base font-bold text-[#0A2540]">
-                  Evaluación Docente: {teacherEval.docenteNombre}
-                </h3>
-              </div>
-              <button onClick={() => setShowTeacherModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <p className="text-xs text-slate-600 my-3">
-              RN-007: El área cambia a Paz y Salvo únicamente si los 3 criterios están aprobados y confirmados.
-            </p>
-
-            <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={teacherEval.planes_aula}
-                  onChange={(e) => setTeacherEval({ ...teacherEval, planes_aula: e.target.checked })}
-                  className="h-4 w-4 rounded text-[#16A34A] focus:ring-[#16A34A]"
-                />
-                <span className="text-xs font-semibold text-slate-800">
-                  1. Planes de Aula finalizados y cargados en matriz
-                </span>
-              </label>
-
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={teacherEval.innovaciones_educativas}
-                  onChange={(e) => setTeacherEval({ ...teacherEval, innovaciones_educativas: e.target.checked })}
-                  className="h-4 w-4 rounded text-[#16A34A] focus:ring-[#16A34A]"
-                />
-                <span className="text-xs font-semibold text-slate-800">
-                  2. Innovaciones Educativas registradas (1.ª y 2.ª convocatoria)
-                </span>
-              </label>
-
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={teacherEval.informes_ejecucion}
-                  onChange={(e) => setTeacherEval({ ...teacherEval, informes_ejecucion: e.target.checked })}
-                  className="h-4 w-4 rounded text-[#16A34A] focus:ring-[#16A34A]"
-                />
-                <span className="text-xs font-semibold text-slate-800">
-                  3. Informes de Ejecución Académica entregados (tutorías, RA, clubes)
-                </span>
-              </label>
-
-              <div className="pt-2">
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Observaciones del evaluador:
-                </label>
-                <textarea
-                  rows={2}
-                  value={teacherEval.observaciones}
-                  onChange={(e) => setTeacherEval({ ...teacherEval, observaciones: e.target.value })}
-                  placeholder="Observaciones de la validación docente..."
-                  className="w-full rounded-lg border border-slate-300 p-2 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-xs font-semibold">
-                Resultado:{' '}
-                <span
-                  className={
-                    teacherEval.planes_aula && teacherEval.innovaciones_educativas && teacherEval.informes_ejecucion
-                      ? 'text-[#16A34A] font-bold'
-                      : 'text-[#DC2626] font-bold'
-                  }
-                >
-                  {teacherEval.planes_aula && teacherEval.innovaciones_educativas && teacherEval.informes_ejecucion
-                    ? 'Paz y Salvo (3/3 ✓)'
-                    : 'Bloqueado (Incompleto)'}
-                </span>
-              </span>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTeacherModal(false)}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveTeacherEval}
-                  disabled={savingTeacher}
-                  className="rounded-xl bg-[#0A2540] px-4 py-2 text-xs font-bold text-white hover:bg-[#133961]"
-                >
-                  {savingTeacher ? 'Guardando...' : 'Confirmar Evaluación (RN-007)'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </Layout>
   );
 };

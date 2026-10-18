@@ -1,7 +1,109 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
+import SignaturePad from '../../components/common/SignaturePad';
 import { useAuth } from '../../hooks/useAuth';
+import { deleteFirma, getFirma, saveFirma } from '../../services/tramite.service';
+import { formatearFecha, mensajeError } from '../../utils/errors';
+
+// Firma personal: se dibuja una vez y se reutiliza al firmar paz y salvos, aprobaciones y la cláusula.
+const FirmaSection = () => {
+  const [firma, setFirma] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [dibujando, setDibujando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [aviso, setAviso] = useState('');
+  const [error, setError] = useState('');
+
+  const cargar = async () => {
+    try {
+      setFirma(await getFirma());
+    } catch (err) {
+      setError(mensajeError(err, 'No se pudo consultar tu firma'));
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  const guardar = async (imagen) => {
+    setGuardando(true);
+    setError('');
+    try {
+      await saveFirma(imagen);
+      setDibujando(false);
+      setAviso('Firma guardada.');
+      await cargar();
+    } catch (err) {
+      setError(mensajeError(err, 'No se pudo guardar la firma'));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const eliminar = async () => {
+    setGuardando(true);
+    setError('');
+    try {
+      await deleteFirma();
+      setAviso('Firma eliminada.');
+      await cargar();
+    } catch (err) {
+      setError(mensajeError(err, 'No se pudo eliminar la firma'));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby="titulo-firma" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+      <h2 id="titulo-firma" className="text-base font-bold text-[#0A2540]">Mi firma</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Dibújala una sola vez. Se usa para firmar tu paz y salvo y, si eres parte del personal de una dependencia,
+        para firmar tus aprobaciones. Solo tú puedes verla en esta pantalla.
+      </p>
+      {aviso && <p role="status" className="mt-3 text-xs font-semibold text-green-700">✓ {aviso}</p>}
+      {error && <p role="alert" className="mt-3 text-xs font-semibold text-red-700">{error}</p>}
+
+      {cargando ? (
+        <p className="mt-4 text-sm text-slate-500">Cargando…</p>
+      ) : dibujando ? (
+        <div className="mt-4">
+          <SignaturePad onSave={guardar} onCancel={() => setDibujando(false)} guardando={guardando} />
+        </div>
+      ) : (
+        <div className="mt-4">
+          {firma?.tiene ? (
+            <div className="flex flex-wrap items-center gap-4">
+              <img src={firma.imagen} alt="Tu firma guardada" className="h-24 max-w-full rounded-xl border border-slate-200 bg-white p-2" />
+              <div className="text-xs text-slate-500">
+                <p>Actualizada: {formatearFecha(firma.actualizada, { hora: true })}</p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => { setAviso(''); setDibujando(true); }} className="rounded-lg border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
+                    Cambiar
+                  </button>
+                  <button type="button" onClick={eliminar} disabled={guardando} className="rounded-lg border border-red-200 px-3 py-1.5 font-semibold text-red-700 hover:bg-red-50">
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+              <p className="text-sm text-slate-600">Aún no tienes una firma guardada.</p>
+              <button type="button" onClick={() => { setAviso(''); setDibujando(true); }} className="rounded-xl bg-[#0A2540] px-4 py-2 text-sm font-bold text-white hover:bg-[#133961]">
+                Dibujar mi firma
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+};
 
 const TIPOS = [
   {
@@ -117,6 +219,8 @@ const Perfil = () => {
             </p>
           )}
         </section>
+
+        {!isOnboarding && <FirmaSection />}
 
         <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
           <fieldset>

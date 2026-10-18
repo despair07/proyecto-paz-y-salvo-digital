@@ -1,357 +1,359 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
-import { useAuth } from '../../hooks/useAuth';
-import api from '../../services/api';
+import ReviewState from '../../components/common/ReviewState';
+import InformeForm from '../../components/informe/InformeForm';
+import { getRevisionFinal, listPendientes, resolverFinal } from '../../services/tramite.service';
+import { formatearFecha, mensajeError } from '../../utils/errors';
 
-const DashboardApprover = () => {
-  const { user } = useAuth();
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
+const ENTREGABLES = [
+  ['innovaciones_educativas', 'Innovaciones educativas'],
+  ['planes_aula', 'Planes de aula'],
+  ['informes_ejecucion', 'Informes de ejecución'],
+];
+
+const Firma = ({ src, alt }) => (
+  src
+    ? <img src={src} alt={alt} className="h-14 max-w-[180px] rounded border border-slate-200 bg-white object-contain p-1" />
+    : <span className="text-[11px] italic text-slate-400">Sin firma registrada</span>
+);
+
+// ------------------------------------------------------------------ revisión final
+const RevisionFinal = ({ id, onVolver, onResuelta }) => {
+  const [d, setD] = useState(null);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [verInforme, setVerInforme] = useState(false);
+  const [rechazando, setRechazando] = useState(false);
+  const [motivos, setMotivos] = useState('');
+  const [observacion, setObservacion] = useState('');
+  const [procesando, setProcesando] = useState(false);
 
-  // Solicitud seleccionada para revisar ficha
-  const [selectedRequest, setSelectedRequest] = useState(null);
-
-  // Modal Rechazo
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [processing, setProcessing] = useState(false);
-
-  // Certificado emitido post-aprobación
-  const [issuedCert, setIssuedCert] = useState(null);
-
-  const loadPendingRequests = async () => {
-    setLoading(true);
-    setError('');
+  const cargar = useCallback(async () => {
+    setCargando(true);
     try {
-      const res = await api.get('/tramites/pendientes-aprobacion');
-      const list = res.data.data || [];
-      setRequests(list);
-      if (list.length > 0 && !selectedRequest) {
-        setSelectedRequest(list[0]);
-      }
+      setD(await getRevisionFinal(id));
+      setError('');
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'Error al cargar trámites pendientes de aprobación');
+      setError(mensajeError(err, 'No se pudo cargar la solicitud'));
     } finally {
-      setLoading(false);
+      setCargando(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    loadPendingRequests();
-  }, [user?.id]);
+    cargar();
+  }, [cargar]);
 
-  // Aprobación final
-  const handleApprove = async (solicitudId) => {
-    setProcessing(true);
+  const resolver = async (payload, mensajeFallo) => {
+    setProcesando(true);
     setError('');
-    setNotice('');
     try {
-      const res = await api.post(`/tramites/${solicitudId}/aprobar`, {
-        decision: 'APROBADO',
-        observacion: 'Aprobado a entera satisfacción por la División de Comunidad Universitaria tras verificar cumplimiento del formato GTH-07 y entrega de cargo.',
-      });
-
-      setNotice('¡Paz y salvo laboral autorizado con éxito! Certificado digital con QR emitido.');
-      setIssuedCert(res.data.certificado);
-      await loadPendingRequests();
+      const res = await resolverFinal(id, payload);
+      onResuelta(res);
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'Error al procesar la aprobación');
+      setError(mensajeError(err, mensajeFallo));
     } finally {
-      setProcessing(false);
+      setProcesando(false);
     }
   };
 
-  // Rechazo motivado
-  const handleReject = async () => {
-    if (!rejectReason.trim()) {
-      setError('Para rechazar una solicitud se debe ingresar una observación motivada obligatoria.');
-      return;
-    }
-    setProcessing(true);
-    setError('');
-    try {
-      await api.post(`/tramites/${selectedRequest.id || selectedRequest.solicitudId}/aprobar`, {
-        decision: 'RECHAZADO',
-        observacion: rejectReason.trim(),
-      });
+  if (cargando && !d) return <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Cargando solicitud…</p>;
+  if (!d) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        {error || 'No se encontró la solicitud.'}
+        <button type="button" onClick={onVolver} className="ml-3 font-semibold underline">Volver</button>
+      </div>
+    );
+  }
 
-      setNotice('Solicitud rechazada con observación motivada.');
-      setShowRejectModal(false);
-      setRejectReason('');
-      await loadPendingRequests();
+  const t = d.trabajador;
+  const pendiente = d.estadoGlobal === 'PENDIENTE_APROBACION';
+  const noAprobadas = d.checklist.filter((c) => c.estado !== 'APROBADA');
+
+  return (
+    <div className="space-y-4">
+      <button type="button" onClick={onVolver} className="text-xs font-semibold text-[#0A2540] hover:underline lg:hidden">← Volver a la lista</button>
+      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-[#D97706]">Ficha de verificación institucional</p>
+        <h2 className="text-lg font-bold text-[#0A2540]">{t.nombre}</h2>
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          {[
+            ['Documento', t.documento],
+            ['Lugar de expedición', t.lugarExpedicion],
+            ['Cargo', t.cargo],
+            ['Vinculación', t.vinculacion],
+            ['Correo', t.correo],
+            ['Jefe inmediato', t.jefe],
+            ['Novedad', t.novedad === 'RETIRO' ? `Retiro${t.fechaRetiro ? ` · ${formatearFecha(t.fechaRetiro)}` : ''}` : 'Cambio de dependencia'],
+            ['Pidió la aprobación final', formatearFecha(d.cierre.fechaSolicitudFinal, { hora: true })],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{k}</dt>
+              <dd className="mt-0.5 break-words text-slate-800">{v || '—'}</dd>
+            </div>
+          ))}
+        </dl>
+        {t.verificado === false && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+            ⚠ Esta persona se autoregistró y TI aún no ha verificado su vinculación con la universidad.
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Paz y salvo de cada dependencia (formato GTH-07)</h3>
+        <ul className="mt-3 space-y-2.5">
+          {d.checklist.map((c) => (
+            <li key={c.id} className="rounded-xl border border-slate-200 p-3.5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-[#0A2540]">{c.nombre}</p>
+                  {c.aspecto && <p className="mt-0.5 text-[11px] text-slate-500">{c.aspecto}</p>}
+                </div>
+                <ReviewState estado={c.estado} />
+              </div>
+              {c.estado === 'APROBADA' && (
+                <div className="mt-2.5 flex flex-wrap items-end justify-between gap-3 border-t border-slate-100 pt-2.5">
+                  <div className="min-w-0 flex-1 text-xs text-slate-700">
+                    <p><strong>Recibí / Revisé:</strong> {c.recibi}</p>
+                    {c.enlace && (
+                      <p className="mt-1">
+                        <strong>{c.etiqueta_enlace || 'Enlace'}:</strong>{' '}
+                        <a href={c.enlace} target="_blank" rel="noopener noreferrer" className="break-all underline underline-offset-2">{c.enlace}</a>
+                      </p>
+                    )}
+                    <p className="mt-1 text-slate-500">{c.revisor} · {formatearFecha(c.fecha_revision, { hora: true })}</p>
+                  </div>
+                  <Firma src={c.firma} alt={`Firma de ${c.revisor}`} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+        {noAprobadas.length > 0 && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+            Hay {noAprobadas.length} dependencia(s) sin aprobar: {noAprobadas.map((c) => c.nombre).join(', ')}.
+          </p>
+        )}
+        {d.entregables && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Entregables del docente</p>
+            <ul className="mt-1.5 space-y-1 text-sm">
+              {ENTREGABLES.map(([clave, texto]) => (
+                <li key={clave}>{d.entregables[clave] ? '✓' : '✕'} {texto}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <button
+          type="button"
+          onClick={() => setVerInforme((v) => !v)}
+          aria-expanded={verInforme}
+          className="flex w-full items-center justify-between text-left text-sm font-bold text-[#0A2540]"
+        >
+          <span>Informe por entrega de cargo{d.informe?.estado === 'COMPLETO' ? ' · completo ✓' : ' · incompleto'}</span>
+          <span aria-hidden="true">{verInforme ? '▲' : '▼'}</span>
+        </button>
+        {verInforme && d.informe && (
+          <div className="mt-4">
+            <InformeForm secciones={d.informe.secciones} readOnly compacto />
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Cláusula y firma del trabajador</h3>
+        <p className="mt-2 text-sm text-slate-700">
+          {d.cierre.clausulaAceptada ? `Cláusula aceptada el ${formatearFecha(d.cierre.fechaClausula, { hora: true })}` : 'Cláusula sin aceptar.'}
+        </p>
+        <div className="mt-2 text-sm text-slate-800">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Observaciones</p>
+          <p className="whitespace-pre-wrap">{d.cierre.observaciones || '—'}</p>
+        </div>
+        <div className="mt-3">
+          <Firma src={d.cierre.firmaTrabajador} alt={`Firma de ${t.nombre}`} />
+        </div>
+      </section>
+
+      {pendiente ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+          {!rechazando ? (
+            <>
+              <label htmlFor="obs" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">Observación (opcional)</label>
+              <textarea
+                id="obs"
+                rows={2}
+                value={observacion}
+                onChange={(e) => setObservacion(e.target.value)}
+                maxLength={1000}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0A2540] focus:ring-2 focus:ring-[#0A2540]/10"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Al aprobar se emite el certificado con QR y se firma con la firma de tu perfil.{' '}
+                <Link to="/perfil" className="font-semibold underline">Revisar mi firma</Link>
+              </p>
+              <div className="mt-4 flex flex-wrap justify-end gap-3">
+                <button type="button" onClick={() => setRechazando(true)} className="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50">
+                  Rechazar…
+                </button>
+                <button
+                  type="button"
+                  disabled={procesando || noAprobadas.length > 0}
+                  onClick={() => resolver({ decision: 'APROBADO', observacion }, 'No se pudo aprobar')}
+                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {procesando ? 'Aprobando…' : 'Aprobar y emitir certificado'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="text-sm font-bold text-rose-800">Rechazar el paz y salvo</h3>
+              <label htmlFor="motivos" className="mb-1 mt-3 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Motivos <span className="text-red-600" aria-hidden="true">*</span>
+              </label>
+              <textarea
+                id="motivos"
+                rows={4}
+                value={motivos}
+                onChange={(e) => setMotivos(e.target.value)}
+                maxLength={1000}
+                placeholder="Explica qué debe corregir el trabajador. Verá este texto y podrá reiniciar el proceso con sus datos anteriores."
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-rose-500"
+              />
+              <div className="mt-4 flex flex-wrap justify-end gap-3">
+                <button type="button" onClick={() => setRechazando(false)} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</button>
+                <button
+                  type="button"
+                  disabled={procesando || motivos.trim().length < 10}
+                  onClick={() => resolver({ decision: 'RECHAZADO', observacion: motivos.trim() }, 'No se pudo rechazar')}
+                  className="rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {procesando ? 'Rechazando…' : 'Confirmar rechazo'}
+                </button>
+              </div>
+              {motivos.trim().length < 10 && <p className="mt-2 text-right text-xs text-slate-500">Mínimo 10 caracteres.</p>}
+            </>
+          )}
+        </section>
+      ) : (
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
+          <p className="font-bold">Trámite resuelto: {d.estadoGlobal.replace(/_/g, ' ').toLowerCase()}</p>
+          {d.resolucion && <p className="mt-1">{d.resolucion.aprobador} · {formatearFecha(d.resolucion.fecha, { hora: true })}</p>}
+          {d.resolucion?.observaciones && <p className="mt-1">{d.resolucion.observaciones}</p>}
+        </section>
+      )}
+    </div>
+  );
+};
+
+// ------------------------------------------------------------------ lista
+const DashboardApprover = () => {
+  const [lista, setLista] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
+  const [certificado, setCertificado] = useState(null);
+  const [seleccion, setSeleccion] = useState(null);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    try {
+      setLista(await listPendientes());
+      setError('');
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'Error al procesar el rechazo');
+      setError(mensajeError(err, 'No se pudo cargar la lista de pendientes'));
     } finally {
-      setProcessing(false);
+      setCargando(false);
     }
+  }, []);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  const resuelta = (res) => {
+    setAviso(res.mensaje);
+    setCertificado(res.certificado || null);
+    setSeleccion(null);
+    cargar();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <Layout title="Panel de Aprobación Final — Comunidad Universitaria">
-      <div className="space-y-6 font-sans">
-        {/* Alertas */}
-        {notice && (
-          <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-800 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span>✅</span>
-              <span>{notice}</span>
-            </div>
-            <button onClick={() => setNotice('')} className="text-green-600 font-bold">✕</button>
+    <Layout title="Aprobación final">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#D97706]">División de Comunidad Universitaria</p>
+            <h2 className="text-lg font-bold text-[#0A2540]">Solicitudes con todas las dependencias al día</h2>
+            <p className="mt-1 text-xs text-slate-600">Revisa lo que aprobó cada área y el informe, y luego aprueba o rechaza con motivos.</p>
           </div>
-        )}
-
-        {error && (
-          <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span>⚠️</span>
-              <span>{error}</span>
-            </div>
-            <button onClick={() => setError('')} className="text-red-600 font-bold">✕</button>
-          </div>
-        )}
-
-        {/* Banner Certificado Recién Emitido (Pantalla 7) */}
-        {issuedCert && (
-          <div className="rounded-2xl border-2 border-green-300 bg-green-50/70 p-6 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-[#16A34A] text-white flex items-center justify-center text-2xl font-bold shadow-sm">
-                🎓
-              </div>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-green-700">
-                  Certificado Digital Emitido (RF-006)
-                </span>
-                <h3 className="text-lg font-bold text-slate-900">
-                  Certificado de Paz y Salvo y Entrega de Cargo
-                </h3>
-                <p className="text-xs text-slate-600">
-                  Token: <span className="font-mono">{issuedCert.token_verificacion?.slice(0, 24)}...</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <a
-                href={`/verificar/${issuedCert.token_verificacion || issuedCert.codigo_qr_token}`}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition text-center flex-1 sm:flex-none"
-              >
-                Validación QR Pública
-              </a>
-              <a
-                href={issuedCert.archivo_url || issuedCert.url_pdf_storage}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl bg-[#16A34A] px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-green-700 transition text-center flex-1 sm:flex-none"
-              >
-                Descargar PDF con QR
-              </a>
-            </div>
-          </div>
-        )}
-
-        {/* Cabecera y Contexto de Aprobación */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-card">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#D97706]">
-                Etapa 3 · Potestad Exclusiva (RN-002)
-              </span>
-              <h2 className="text-xl font-bold text-[#0A2540]">
-                Bandeja de Trámites Listos para Cierre Institucional
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                RN-005 & RN-010: Solo se listan trabajadores con 0 bloqueos activos y con informe de entrega de cargo completo.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={loadPendingRequests}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              🔄 Actualizar Bandeja
-            </button>
-          </div>
+          <button type="button" onClick={cargar} className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Actualizar</button>
         </div>
 
-        {/* Layout de Aprobación (2 columnas: Lista y Ficha) */}
-        <div className="grid gap-6 lg:grid-cols-12">
-          {/* Lista de Solicitudes (5 cols) */}
-          <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-card">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                Trabajadores Elegibles ({requests.length})
-              </h3>
-              <span className="text-[11px] text-[#16A34A] font-bold">100% Liberados</span>
+        {aviso && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm font-semibold text-emerald-800">✓ {aviso}</div>}
+        {certificado?.token_verificacion && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-sm font-bold text-emerald-900">Certificado emitido</p>
+            <div className="flex gap-2">
+              <a href={`/verificar/${certificado.token_verificacion}`} target="_blank" rel="noreferrer" className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Verificación pública</a>
+              <a href={`/api/v1/certificados/${certificado.token_verificacion}/pdf`} target="_blank" rel="noreferrer" className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">Descargar PDF</a>
             </div>
+          </div>
+        )}
+        {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-semibold text-red-700">{error}</div>}
 
-            {loading ? (
-              <p className="py-8 text-center text-xs text-slate-400">Cargando solicitudes...</p>
-            ) : requests.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 text-xs">
-                No hay solicitudes pendientes con todos los paz y salvos e informe al día.
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {requests.map((req) => {
-                  const isSelected = (selectedRequest?.id || selectedRequest?.solicitudId) === (req.id || req.solicitudId);
-                  return (
-                    <div
-                      key={req.id || req.solicitudId}
-                      onClick={() => setSelectedRequest(req)}
-                      className={`cursor-pointer rounded-xl border p-4 transition ${
-                        isSelected
-                          ? 'border-[#0A2540] bg-slate-50 shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-sm text-[#0A2540]">{req.nombre || req.usuario}</span>
-                        <span className="badge-approved px-2 py-0.5 rounded text-[10px] font-bold">
-                          AL DÍA
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">{req.cargo} · {req.vinculacion || req.tipoVinculacion}</p>
-                      <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-                        <span>Doc: {req.documento}</span>
-                        <span>{req.novedad || req.tipoNovedad}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+        <div className="grid gap-5 lg:grid-cols-[minmax(300px,380px)_1fr]">
+          <div className={seleccion ? 'hidden lg:block' : ''}>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-600">Pendientes ({lista.length})</h3>
+            <ul className="space-y-2">
+              {cargando && <li className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Cargando…</li>}
+              {!cargando && lista.length === 0 && (
+                <li className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                  No hay solicitudes esperando tu aprobación.
+                </li>
+              )}
+              {lista.map((s) => (
+                <li key={s.solicitudId}>
+                  <button
+                    type="button"
+                    onClick={() => setSeleccion(s.solicitudId)}
+                    aria-current={seleccion === s.solicitudId}
+                    className={`w-full rounded-xl border bg-white p-3.5 text-left transition hover:bg-slate-50 ${
+                      seleccion === s.solicitudId ? 'border-[#0A2540] ring-1 ring-[#0A2540]' : 'border-slate-200'
+                    }`}
+                  >
+                    <p className="text-sm font-bold text-[#0A2540]">{s.nombre}</p>
+                    <p className="mt-0.5 text-xs text-slate-600">{s.cargo} · {s.vinculacion}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {s.novedad === 'RETIRO' ? 'Retiro' : 'Cambio de dependencia'} · solicitada {formatearFecha(s.fechaSolicitudFinal)}
+                      {s.verificado === false ? ' · sin verificar' : ''}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          {/* Ficha de Verificación y Dictamen (7 cols) */}
-          <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-6 sm:p-7 shadow-card flex flex-col justify-between">
-            {selectedRequest ? (
-              <div>
-                <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-4">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#D97706]">
-                      Ficha de Verificación Institucional
-                    </span>
-                    <h3 className="text-xl font-bold text-[#0A2540]">
-                      {selectedRequest.nombre || selectedRequest.usuario}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {selectedRequest.cargo} · {selectedRequest.correo} · Cédula: {selectedRequest.documento}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-800">
-                    Apto para Cierre
-                  </span>
-                </div>
-
-                {/* Checklist Verde de Verificación por Área (Pantalla 5) */}
-                <div className="mb-6">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
-                    Checklist de Áreas del Formato GTH-07:
-                  </h4>
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {(selectedRequest.areasVerificadas || []).map((area, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50/50 p-2.5 text-xs"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#16A34A] text-white text-[10px] font-bold">
-                            ✓
-                          </span>
-                          <div>
-                            <p className="font-bold text-slate-900">{area.dependencia}</p>
-                            <p className="text-[11px] text-slate-500">{area.motivo || 'Paz y salvo verificado'}</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {area.responsable || 'Encargado'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                    <span className="font-semibold text-slate-700">Informe de Entrega de Cargo (RN-010):</span>
-                    <span className="text-green-700 font-bold">Completo ✓</span>
-                  </div>
-                </div>
-
-                {/* Botones de Decisión (Pantalla 5) */}
-                <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowRejectModal(true)}
-                    disabled={processing}
-                    className="w-full sm:w-auto rounded-xl border border-red-300 bg-red-50 px-5 py-2.5 text-xs font-bold text-red-700 hover:bg-red-100 transition"
-                  >
-                    Rechazar Solicitud
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApprove(selectedRequest.id || selectedRequest.solicitudId)}
-                    disabled={processing}
-                    className="w-full sm:w-auto rounded-xl bg-[#16A34A] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-green-700 transition"
-                  >
-                    {processing ? 'Autorizando...' : 'Autorizar y Emitir Paz y Salvo Definitivo'}
-                  </button>
-                </div>
-              </div>
+          <div className={seleccion ? '' : 'hidden lg:block'}>
+            {seleccion ? (
+              <RevisionFinal key={seleccion} id={seleccion} onVolver={() => setSeleccion(null)} onResuelta={resuelta} />
             ) : (
-              <div className="text-center py-16 text-slate-400 text-sm">
-                Seleccione un trabajador de la lista para auditar su ficha de paz y salvo.
+              <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+                Selecciona una solicitud para ver el detalle y decidir.
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* Modal Rechazo Motivado */}
-      {showRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-modal">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-red-700">Rechazar Solicitud de Paz y Salvo</h3>
-              <button onClick={() => setShowRejectModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <div className="my-4">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Motivo / Causa del Rechazo (Obligatorio):
-              </label>
-              <textarea
-                rows={3}
-                required
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Especifique las razones por las cuales no se otorga el visto bueno final..."
-                className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-800 outline-none focus:border-red-500"
-              />
-            </div>
-
-            <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowRejectModal(false)}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleReject}
-                disabled={processing}
-                className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white hover:bg-red-700"
-              >
-                {processing ? 'Rechazando...' : 'Confirmar Rechazo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </Layout>
   );
 };

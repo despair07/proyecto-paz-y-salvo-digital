@@ -161,7 +161,13 @@ const Login = () => {
       const res = await login(response.credential);
       navigate(res.home, { replace: true });
     } catch (err) {
-      setErrorToast(err.response?.data?.mensaje || 'Error al iniciar sesión con Google Workspace');
+      console.error('Inicio de sesión con Google falló', err);
+      setErrorToast(
+        err.response?.data?.mensaje
+          || (err.response
+            ? `Error al iniciar sesión con Google Workspace (código ${err.response.status})`
+            : 'No se pudo comunicar con el servidor. Verifica que el backend esté en ejecución.')
+      );
     } finally {
       setLoading(false);
     }
