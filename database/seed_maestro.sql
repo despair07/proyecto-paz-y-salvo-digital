@@ -71,6 +71,11 @@ ON CONFLICT (id) DO UPDATE
       aplica_cambio_dependencia = EXCLUDED.aplica_cambio_dependencia,
       es_aprobadora_final = EXCLUDED.es_aprobadora_final;
 
+-- SST: el trabajador adjunta un enlace al certificado de horas que se le exige (RN-015)
+UPDATE dependencias
+   SET requiere_enlace = TRUE, etiqueta_enlace = 'Enlace del certificado de horas'
+ WHERE id = '6513e4af-9d27-4d7e-9eb4-777777777777';
+
 -- 3. CATÁLOGO DE CARGOS ------------------------------------------------------
 INSERT INTO catalogo_cargos (nombre, tipo_vinculacion) VALUES
   ('Docente de Planta',                    'Docente'),

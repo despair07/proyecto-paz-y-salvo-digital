@@ -1,19 +1,22 @@
 -- ============================================================================
 -- PAZ & SALVO DIGITAL UNIAUTÓNOMA — DATOS FICTICIOS INICIALES
--- Personas, trámites y bloqueos de ejemplo para operar y probar el sistema
--- completo con la base de datos real. Todo es ficticio.
+-- Personas, trámites y revisiones de ejemplo para operar y probar el sistema completo con la
+-- base de datos real. Todo es ficticio. Los trámites se arman con el mismo flujo del sistema
+-- (solicitar, aprobar, bloquear), de modo que los triggers validan cada paso.
 -- Ejecutar DESPUÉS de ddl.sql y seed_maestro.sql.
 --
--- Contraseña de TODAS las cuentas: Demo2026*   (hash bcrypt de abajo)
+-- Contraseña de TODAS las cuentas (solo desarrollo, AUTH_PASSWORD_ENABLED): Demo2026*
 -- Para cambiarla: node -e "console.log(require('bcryptjs').hashSync('NuevaClave',10))"
 -- y reemplaza el hash en la sección 1.
 --
--- Escenarios cubiertos (periodo 2026-2, una solicitud por trabajador):
---   Laura Ortiz     Docente         EN_PROCESO · 3 bloqueos activos · entregables 2/3
---   Carlos Muñoz    Administrativo  EN_PROCESO · 1 bloqueo activo (Almacén), DTI resuelto
---   Sofía Cárdenas  Contratista     AL_DIA     · lista para aprobación final
---   Mateo Gómez     Administrativo  APROBADO_FINAL · certificado emitido (QR verificable)
---   Valentina Narváez Docente       AL_DIA · informe en borrador, etapa Jefe Inmediato
+-- Escenarios (periodo 2026-2, un trámite por trabajador):
+--   Laura Ortiz       Docente         EN_PROCESO · 5 de 8 dependencias aprobaron; Medios, Contable y
+--                                     Desarrollo Profesoral la bloquearon
+--   Carlos Muñoz      Administrativo  EN_PROCESO · cambio de dependencia (SST y Profesoral no aplican);
+--                                     Almacén bloqueó, Archivo en revisión, Contable sin solicitar
+--   Sofía Cárdenas    Contratista     PENDIENTE_APROBACION · todo aprobado, espera a Comunidad Universitaria
+--   Mateo Gómez       Administrativo  APROBADO_FINAL · certificado emitido (QR verificable)
+--   Valentina Narváez Docente         BORRADOR · datos generales e informe a medias
 -- ============================================================================
 
 -- Todo lo que se cree aquí queda en auditoria con este motivo
@@ -84,183 +87,310 @@ INSERT INTO encargados_dependencia (usuario_id, dependencia_id, es_jefe_inmediat
   ('11111111-1111-4111-8111-cccccccccccc', '6513e4af-9d27-4d7e-9eb4-999999999999', FALSE)   -- Comunidad Universitaria
 ON CONFLICT (usuario_id, dependencia_id) DO NOTHING;
 
--- 4. SOLICITUDES DE PAZ Y SALVO ----------------------------------------------
--- estado_global se recalcula solo (RN-001) al insertar bloqueos.
+-- 3b. FIRMAS (imagen de ejemplo; cada persona dibuja la suya en su perfil) -------
+INSERT INTO firmas_usuario (usuario_id, imagen)
+SELECT id, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAABGCAYAAACnp/qkAAABmElEQVR42u3cS27DMAwFQK97j94j979UuuqiQIGktWU9kjOAdwkQSXyy5E+OAwAAAAAAAAAAAAAAAAAAAAAAAAAAgB8+Ph/P70NvwOKQCRzbCq574QkaMSHrXIyCRkTQznxW0OCNgrvju9XbzsVLp4n9MKlwBS10jyJsvYrYWS2wk7sPysq2JfebsIUXV/ercZMKW9CKdHKngbq7HSl9J2wFO7nT5e8pxW4JWXyQO1z+nrJ3ErQmM2q1QZy4j2oXttSG7BjQyZNP2tmu7RIysUE7lyzCtjcY7fdq6bPm5Imn0pLqbFBGPayQujdwtq+9z3z120c/jpd2j8XZpPbti8mvB5Urdku4Pn8FIGSBg2wf2TNsBA526myXcPFG4ARu1GzuiQpaha7a5W5ho2yheaNY2LipCCoW112PMKk8oVv26v70/hA2lhZFh+Ja9Wc9Ku33fhl509zb1te1pVqhnAnAjmN86Lp2yH8Ge9UDvo6mq4S/NHJChyhywYktMgEQABS34kewBABhEwBwXwQAAAAAAAAAACDfFw+LGZP70VVQAAAAAElFTkSuQmCC'
+FROM usuarios
+ON CONFLICT (usuario_id) DO NOTHING;
+
+-- 4. FUNCIONES AUXILIARES DE LA CARGA (temporales: desaparecen al cerrar la sesión) ---------
+-- El trabajador solicita la aprobación de una dependencia
+CREATE OR REPLACE FUNCTION pg_temp.solicitar(p_sol UUID, p_dep UUID, p_cuando TIMESTAMPTZ, p_enlace TEXT DEFAULT NULL) RETURNS VOID
+LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO revisiones_area (solicitud_id, dependencia_id, enlace) VALUES (p_sol, p_dep, p_enlace);
+  UPDATE revisiones_area SET solicitada_el = p_cuando WHERE solicitud_id = p_sol AND dependencia_id = p_dep;
+END;
+$$;
+
+-- La dependencia aprueba con su "Recibí" y su firma
+CREATE OR REPLACE FUNCTION pg_temp.aprobar(p_sol UUID, p_dep UUID, p_revisor UUID, p_cuando TIMESTAMPTZ, p_recibi TEXT) RETURNS VOID
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE revisiones_area
+     SET estado = 'APROBADA', revisor_id = p_revisor, fecha_revision = p_cuando, recibi = p_recibi,
+         firma_snapshot = (SELECT imagen FROM firmas_usuario WHERE usuario_id = p_revisor)
+   WHERE solicitud_id = p_sol AND dependencia_id = p_dep;
+END;
+$$;
+
+-- La dependencia bloquea: registra categoría y motivo y marca la revisión
+CREATE OR REPLACE FUNCTION pg_temp.bloquear(p_sol UUID, p_dep UUID, p_revisor UUID, p_cuando TIMESTAMPTZ, p_categoria TEXT, p_motivo TEXT) RETURNS VOID
+LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO bloqueos_dependencia (solicitud_id, dependencia_id, registrado_por_id, categoria, motivo_descripcion, fecha_registro)
+  VALUES (p_sol, p_dep, p_revisor, p_categoria, p_motivo, p_cuando);
+  UPDATE revisiones_area SET estado = 'BLOQUEADA', revisor_id = p_revisor, fecha_revision = p_cuando
+   WHERE solicitud_id = p_sol AND dependencia_id = p_dep;
+END;
+$$;
+
+-- El trabajador vuelve a solicitar una dependencia que lo bloqueó
+CREATE OR REPLACE FUNCTION pg_temp.resolicitar(p_sol UUID, p_dep UUID) RETURNS VOID
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE revisiones_area SET estado = 'SOLICITADA' WHERE solicitud_id = p_sol AND dependencia_id = p_dep;
+END;
+$$;
+
+-- Informe por entrega de cargo completo (estructura de las secciones I a VIII); los textos
+-- se personalizan con los datos de cada persona.
+CREATE OR REPLACE FUNCTION pg_temp.informe(p_nombre TEXT, p_documento TEXT, p_cargo TEXT, p_dependencia TEXT,
+                                p_jefe TEXT, p_jefe_cargo TEXT, p_correo TEXT, p_telefono TEXT,
+                                p_inicio TEXT, p_fin TEXT, p_presentacion TEXT) RETURNS JSONB
+LANGUAGE sql AS $$
+  SELECT replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+    $j$
+{
+  "fecha_presentacion": "@PRESENTACION@",
+  "I_datos_generales": {
+    "nombres_completos": "@NOMBRE@", "tipo_identificacion": "CC", "otro_tipo": "",
+    "numero_identificacion": "@DOCUMENTO@", "ciudad_pais_expedicion": "Popayán, Colombia",
+    "cargo_nombre": "@CARGO@", "dependencia_nombre": "@DEPENDENCIA@",
+    "superior_nombre": "@JEFE@", "superior_cargo": "@JEFECARGO@",
+    "periodo_inicio": "@INICIO@", "periodo_fin": "@FIN@"
+  },
+  "II_informe_gestion": {
+    "propositos": { "no_aplica": false, "justificacion": "", "filas": [
+      { "objetivo": "Cumplir las funciones propias del cargo", "estado": "Cumplido", "descripcion": "Actividades del cargo ejecutadas durante todo el periodo, con soportes archivados." },
+      { "objetivo": "Entregar informes de gestión periódicos", "estado": "Cumplido", "descripcion": "Informes semestrales presentados a la jefatura en las fechas establecidas." }
+    ] },
+    "proyectos": { "no_aplica": false, "justificacion": "", "filas": [
+      { "proyecto": "Actualización de procesos del área", "acciones_concluidas": "Revisión y ajuste de los procedimientos vigentes.", "acciones_pendientes": "Socializar los cambios con el equipo que continúa." }
+    ] },
+    "contactos": { "no_aplica": false, "justificacion": "", "filas": [
+      { "nombre": "Oficina de Contratación", "institucion": "Proveedor de servicios", "datos_contacto": "contacto@proveedor.example", "razones": "Seguimiento de solicitudes de servicio." }
+    ] }
+  },
+  "III_procedimientos": { "no_aplica": false, "justificacion": "", "filas": [
+    { "descripcion": "Procedimientos y manuales del área disponibles en la carpeta compartida institucional." }
+  ] },
+  "IV_formatos": { "no_aplica": false, "justificacion": "", "filas": [
+    { "descripcion": "Formatos de seguimiento y control actualizados según el Sistema Integrado de Gestión." }
+  ] },
+  "V_informes": { "no_aplica": false, "justificacion": "", "filas": [
+    { "nombre": "Informe de gestión", "presentado_a": "Superior inmediato y Talento Humano", "periodicidad": "Semestral", "fecha": "30/06 y 30/11", "papel": "Elaboración y envío" }
+  ] },
+  "VI_recursos": {
+    "infraestructura": { "no_aplica": false, "justificacion": "", "filas": [ { "espacio": "Puesto de trabajo asignado", "estado": "Buen estado" } ] },
+    "muebles": { "no_aplica": false, "justificacion": "", "filas": [ { "elemento": "Escritorio y silla", "numero": "2", "estado": "Buen estado" } ] },
+    "equipos": { "no_aplica": false, "justificacion": "", "filas": [ { "equipo": "Equipo de cómputo institucional", "estado": "Buen estado" } ] },
+    "archivos_fisicos": { "no_aplica": false, "justificacion": "", "filas": [ { "nombre": "Carpetas de gestión", "descripcion": "Documentos del periodo", "localizacion": "Archivador del puesto de trabajo" } ] },
+    "archivos_equipos": { "no_aplica": false, "justificacion": "", "filas": [ { "nombre": "Documentos de trabajo", "ruta": "D:/Documentos/Gestion" } ] },
+    "software": { "no_aplica": false, "justificacion": "", "filas": [ { "identificacion": "Correo y herramientas institucionales", "usos": "Gestión diaria", "papel": "Usuario", "acceso_localizacion": "Cuenta institucional", "estado_credencial": "RESTABLECIDA_POR_TI" } ] },
+    "correos": { "no_aplica": false, "justificacion": "", "filas": [ { "correo": "@CORREO@", "estado_credencial": "RESTABLECIDA_POR_TI" } ] },
+    "snies": { "no_aplica": true, "justificacion": "El cargo no administra información del SNIES." },
+    "otros": { "no_aplica": true, "justificacion": "No tengo otros recursos a cargo." }
+  },
+  "VII_anexos": {
+    "anexos": { "no_aplica": false, "justificacion": "", "filas": [ { "identificacion": "Acta de entrega del puesto de trabajo", "medio": "Físico", "descripcion": "Acta firmada por el superior inmediato." } ] },
+    "observaciones": "Sin observaciones adicionales."
+  },
+  "VIII_contacto": { "correo": "@CORREO@", "telefono": "@TELEFONO@", "direccion": "Popayán, Cauca" }
+}
+    $j$,
+    '@PRESENTACION@', p_presentacion), '@NOMBRE@', p_nombre), '@DOCUMENTO@', p_documento), '@CARGO@', p_cargo),
+    '@DEPENDENCIA@', p_dependencia), '@JEFECARGO@', p_jefe_cargo), '@JEFE@', p_jefe), '@INICIO@', p_inicio),
+    '@FIN@', p_fin), '@CORREO@', p_correo), '@TELEFONO@', p_telefono)::JSONB
+$$;
+
+-- 5. SOLICITUDES DE PAZ Y SALVO -----------------------------------------------------------
+-- Todas nacen en BORRADOR; el estado cambia solo con las revisiones (RN-001).
 INSERT INTO solicitudes_paz_y_salvo (
-  id, usuario_id, periodo_academico_id, jefe_inmediato_id, tipo_novedad, cargo_desempenado,
-  lugar_expedicion_documento, fecha_retiro, fecha_solicitud, estado_global, etapa_actual
+  id, usuario_id, periodo_academico_id, jefe_inmediato_id, nombre_completo, tipo_documento, numero_documento,
+  lugar_expedicion_documento, cargo_desempenado, tipo_novedad, fecha_retiro, fecha_solicitud
 ) VALUES
   ('aaaa1111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', '77777777-7777-4777-8777-777777777777',
-   '11111111-1111-4111-8111-444444444444', 'RETIRO', 'Docente de Planta',
-   'Popayán, Cauca', '2026-11-30', '2026-10-01 08:30:00-05', 'EN_PROCESO', 'AREAS_GESTION'),
+   '11111111-1111-4111-8111-444444444444', 'Laura Marcela Ortiz Peña', 'CC', '1.061.700.101',
+   'Popayán, Cauca', 'Docente de Planta', 'RETIRO', '2026-11-30', '2026-10-01 08:30:00-05'),
   ('bbbb2222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-222222222222', '77777777-7777-4777-8777-777777777777',
-   '11111111-1111-4111-8111-444444444444', 'CAMBIO_DEPENDENCIA', 'Auxiliar Administrativo',
-   'Popayán, Cauca', '2026-11-15', '2026-10-02 09:15:00-05', 'EN_PROCESO', 'AREAS_GESTION'),
+   '11111111-1111-4111-8111-444444444444', 'Carlos Andrés Muñoz Ruiz', 'CC', '1.061.700.102',
+   'Popayán, Cauca', 'Auxiliar Administrativo', 'CAMBIO_DEPENDENCIA', NULL, '2026-10-02 09:15:00-05'),
   ('cccc3333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-333333333333', '77777777-7777-4777-8777-777777777777',
-   '11111111-1111-4111-8111-444444444444', 'RETIRO', 'Contratista de Apoyo a la Gestión',
-   'Popayán, Cauca', '2026-11-30', '2026-10-03 10:00:00-05', 'AL_DIA', 'COMUNIDAD_UNIVERSITARIA'),
+   '11111111-1111-4111-8111-444444444444', 'Sofía Valentina Cárdenas Lozano', 'CC', '1.061.700.103',
+   'Popayán, Cauca', 'Contratista de Apoyo a la Gestión', 'RETIRO', '2026-11-30', '2026-10-03 10:00:00-05'),
   ('dddd4444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-eeeeeeeeeeee', '77777777-7777-4777-8777-777777777777',
-   '11111111-1111-4111-8111-444444444444', 'RETIRO', 'Profesional Universitario',
-   'Santander de Quilichao, Cauca', '2026-10-15', '2026-09-14 08:00:00-05', 'AL_DIA', 'COMUNIDAD_UNIVERSITARIA'),
+   '11111111-1111-4111-8111-444444444444', 'Mateo Andrés Gómez Zúñiga', 'CC', '1.061.700.114',
+   'Santander de Quilichao, Cauca', 'Profesional Universitario', 'RETIRO', '2026-10-15', '2026-09-14 08:00:00-05'),
   ('eeee5555-5555-4555-8555-555555555555', '11111111-1111-4111-8111-ffffffffffff', '77777777-7777-4777-8777-777777777777',
-   '11111111-1111-4111-8111-444444444444', 'RETIRO', 'Docente de Cátedra',
-   'Popayán, Cauca', '2026-12-15', '2026-10-12 14:20:00-05', 'EN_PROCESO', 'JEFE_INMEDIATO')
-ON CONFLICT (usuario_id, periodo_academico_id) DO NOTHING;
+   '11111111-1111-4111-8111-444444444444', 'Valentina Isabel Narváez Mosquera', 'CC', NULL,
+   NULL, 'Docente de Cátedra', 'RETIRO', NULL, '2026-10-12 14:20:00-05')
+ON CONFLICT DO NOTHING;
 
--- 5. INFORMES DE ENTREGA DE CARGO (RF-010) -----------------------------------
-INSERT INTO informes_entrega_cargo (solicitud_id, estado, secciones, fecha_completado, validado_por_id, fecha_validacion) VALUES
-  ('aaaa1111-1111-4111-8111-111111111111', 'COMPLETO', '{
-     "I_datos_generales":          {"completado": true, "observaciones": "Docente de planta del programa de Ingeniería de Sistemas"},
-     "II_informe_gestion":         {"completado": true, "actividades": "Cuatro asignaturas del plan de estudios y dirección de dos trabajos de grado"},
-     "III_procedimientos":         {"completado": true, "detalle": "Guías de laboratorio y rúbricas de evaluación entregadas al coordinador"},
-     "IV_formatos":                {"completado": true, "detalle": "Formatos de seguimiento académico actualizados"},
-     "V_informes_presentados":     {"completado": true, "detalle": "Informe de semestre 2026-1 radicado en decanatura"},
-     "VI_estado_recursos":         {"completado": true, "detalle": "Equipo de cómputo y llaves de oficina por entregar"},
-     "VII_anexos":                 {"completado": true, "detalle": "Acta de entrega de material didáctico"},
-     "VIII_contacto_verificacion": {"completado": true, "telefono": "3104567812", "correoPersonal": "laura.ortiz.p@gmail.com"}
-   }'::jsonb, '2026-10-01 16:40:00-05', '11111111-1111-4111-8111-444444444444', '2026-10-02 10:15:00-05'),
-  ('bbbb2222-2222-4222-8222-222222222222', 'COMPLETO', '{
-     "I_datos_generales":          {"completado": true, "observaciones": "Datos de auxiliar administrativo diligenciados"},
-     "II_informe_gestion":         {"completado": true, "actividades": "Procesos de correspondencia y radicación al día"},
-     "III_procedimientos":         {"completado": true, "detalle": "Manuales de archivo y atención al usuario vigentes"},
-     "IV_formatos":                {"completado": true, "detalle": "Formatos institucionales actualizados según SIG"},
-     "V_informes_presentados":     {"completado": true, "detalle": "Informes semestrales radicados en vicerrectoría"},
-     "VI_estado_recursos":         {"completado": true, "detalle": "Escritorio y estación de trabajo física entregados"},
-     "VII_anexos":                 {"completado": true, "detalle": "Actas de entrega física adjuntas"},
-     "VIII_contacto_verificacion": {"completado": true, "telefono": "3157890123", "correoPersonal": "carlos.munoz.r@gmail.com"}
-   }'::jsonb, '2026-10-02 15:30:00-05', '11111111-1111-4111-8111-444444444444', '2026-10-03 09:00:00-05'),
-  ('cccc3333-3333-4333-8333-333333333333', 'COMPLETO', '{
-     "I_datos_generales":          {"completado": true, "observaciones": "Contrato de prestación de servicios No. 2026-089"},
-     "II_informe_gestion":         {"completado": true, "actividades": "Obligaciones contractuales ejecutadas al 100 %"},
-     "III_procedimientos":         {"completado": true, "detalle": "Procedimientos de gestión documental entregados"},
-     "IV_formatos":                {"completado": true, "detalle": "Formatos de entrega de evidencias validados"},
-     "V_informes_presentados":     {"completado": true, "detalle": "Informe final de actividades aprobado por el supervisor"},
-     "VI_estado_recursos":         {"completado": true, "detalle": "No se le asignaron bienes devolutivos"},
-     "VII_anexos":                 {"completado": true, "detalle": "Bitácora de gestión y constancia del supervisor"},
-     "VIII_contacto_verificacion": {"completado": true, "telefono": "3189988776", "correoPersonal": "sofia.cardenas.l@gmail.com"}
-   }'::jsonb, '2026-10-03 11:20:00-05', '11111111-1111-4111-8111-444444444444', '2026-10-03 14:00:00-05'),
-  ('dddd4444-4444-4444-8444-444444444444', 'COMPLETO', '{
-     "I_datos_generales":          {"completado": true, "observaciones": "Profesional universitario de la oficina de Planeación"},
-     "II_informe_gestion":         {"completado": true, "actividades": "Consolidación de indicadores institucionales 2026-1"},
-     "III_procedimientos":         {"completado": true, "detalle": "Procedimiento de reporte SNIES documentado"},
-     "IV_formatos":                {"completado": true, "detalle": "Plantillas de reporte entregadas al sucesor"},
-     "V_informes_presentados":     {"completado": true, "detalle": "Informe de gestión trimestral aprobado"},
-     "VI_estado_recursos":         {"completado": true, "detalle": "Portátil institucional y token de acceso devueltos"},
-     "VII_anexos":                 {"completado": true, "detalle": "Acta de empalme firmada con el sucesor"},
-     "VIII_contacto_verificacion": {"completado": true, "telefono": "3122345678", "correoPersonal": "mateo.gomez.z@gmail.com"}
-   }'::jsonb, '2026-09-14 17:00:00-05', '11111111-1111-4111-8111-444444444444', '2026-09-15 09:30:00-05')
-ON CONFLICT (solicitud_id) DO NOTHING;
+-- 6. INFORMES POR ENTREGA DE CARGO ------------------------------------------------------------
+INSERT INTO informes_entrega_cargo (solicitud_id, estado, secciones, fecha_completado)
+SELECT v.sid, 'COMPLETO', v.secciones, v.completado FROM (VALUES
+  ('aaaa1111-1111-4111-8111-111111111111'::UUID,
+   pg_temp.informe('Laura Marcela Ortiz Peña', '1.061.700.101', 'Docente de Planta', 'Programa de Ingeniería de Sistemas',
+                   'Martha Lucía Quintero', 'Coordinador Administrativo', 'laura.ortiz@uniautonoma.edu.co', '3104567812',
+                   '2019-02-01', '2026-11-30', '2026-10-01'), TIMESTAMPTZ '2026-10-01 16:40:00-05'),
+  ('bbbb2222-2222-4222-8222-222222222222'::UUID,
+   pg_temp.informe('Carlos Andrés Muñoz Ruiz', '1.061.700.102', 'Auxiliar Administrativo', 'Oficina de Correspondencia',
+                   'Martha Lucía Quintero', 'Coordinador Administrativo', 'carlos.munoz@uniautonoma.edu.co', '3157890123',
+                   '2022-03-15', '2026-11-15', '2026-10-02'), TIMESTAMPTZ '2026-10-02 15:30:00-05'),
+  ('cccc3333-3333-4333-8333-333333333333'::UUID,
+   pg_temp.informe('Sofía Valentina Cárdenas Lozano', '1.061.700.103', 'Contratista de Apoyo a la Gestión', 'Gestión Documental',
+                   'Martha Lucía Quintero', 'Coordinador Administrativo', 'sofia.cardenas@uniautonoma.edu.co', '3189988776',
+                   '2025-02-01', '2026-11-30', '2026-10-03'), TIMESTAMPTZ '2026-10-03 11:20:00-05'),
+  ('dddd4444-4444-4444-8444-444444444444'::UUID,
+   pg_temp.informe('Mateo Andrés Gómez Zúñiga', '1.061.700.114', 'Profesional Universitario', 'Oficina de Planeación',
+                   'Martha Lucía Quintero', 'Coordinador Administrativo', 'mateo.gomez@uniautonoma.edu.co', '3122345678',
+                   '2021-01-18', '2026-10-15', '2026-09-14'), TIMESTAMPTZ '2026-09-14 17:00:00-05')
+) AS v(sid, secciones, completado)
+WHERE NOT EXISTS (SELECT 1 FROM informes_entrega_cargo i WHERE i.solicitud_id = v.sid);
 
--- Valentina: borrador (solo las dos primeras secciones diligenciadas)
-INSERT INTO informes_entrega_cargo (solicitud_id, estado, secciones) VALUES
-  ('eeee5555-5555-4555-8555-555555555555', 'BORRADOR', '{
-     "I_datos_generales":          {"completado": true, "observaciones": "Docente de cátedra, programa de Derecho"},
-     "II_informe_gestion":         {"completado": false, "actividades": "En redacción"},
-     "III_procedimientos":         {},
-     "IV_formatos":                {},
-     "V_informes_presentados":     {},
-     "VI_estado_recursos":         {},
-     "VII_anexos":                 {},
-     "VIII_contacto_verificacion": {}
-   }'::jsonb)
-ON CONFLICT (solicitud_id) DO NOTHING;
+-- Valentina: borrador (solo empezó la sección I)
+INSERT INTO informes_entrega_cargo (solicitud_id, estado, secciones)
+SELECT 'eeee5555-5555-4555-8555-555555555555', 'BORRADOR', '{
+     "I_datos_generales": { "nombres_completos": "Valentina Isabel Narváez Mosquera", "tipo_identificacion": "CC",
+                            "cargo_nombre": "Docente de Cátedra", "dependencia_nombre": "Programa de Derecho" }
+   }'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM informes_entrega_cargo WHERE solicitud_id = 'eeee5555-5555-4555-8555-555555555555');
 
--- 6. ENTREGABLES PROFESORALES (RN-007, solo docentes) ------------------------
-INSERT INTO entregables_profesorales (
-  solicitud_id, planes_aula_aprobado, innovaciones_educativas_aprobado, informes_ejecucion_aprobado,
-  evaluador_id, fecha_evaluacion, observaciones
-) VALUES
-  ('aaaa1111-1111-4111-8111-111111111111', TRUE, TRUE, FALSE,
-   '11111111-1111-4111-8111-bbbbbbbbbbbb', '2026-10-05 14:00:00-05',
-   'Planes de aula e innovaciones educativas validados; pendiente el informe de ejecución de tutorías y clubes académicos.'),
-  ('eeee5555-5555-4555-8555-555555555555', FALSE, FALSE, FALSE, NULL, NULL, NULL)
-ON CONFLICT (solicitud_id) DO NOTHING;
+-- 7. REVISIONES POR DEPENDENCIA ------------------------------------------------------------------
+-- Ids de dependencias (seed_maestro): 111 Jefe · 222 TI · 333 Medios · 444 Almacén · 555 Archivo ·
+--   666 Contable · 777 SST · 888 Desarrollo Profesoral
+-- Ids de encargados: 444 Martha (jefe) · 555 Andrés (TI) · 666 Juliana (Medios) · 777 Héctor (Almacén) ·
+--   888 Diana (Archivo) · 999 Ricardo (Contable) · aaa Natalia (SST) · bbb Camilo (Profesoral)
 
--- 7. BLOQUEOS (RN-003, RN-004, RN-009) ---------------------------------------
--- 7.1 Laura Ortiz — 3 bloqueos activos
-INSERT INTO bloqueos_dependencia (id, solicitud_id, dependencia_id, registrado_por_id, categoria, motivo_descripcion, estado, fecha_registro) VALUES
-  ('b1111111-1111-4111-8111-111111111111', 'aaaa1111-1111-4111-8111-111111111111', '6513e4af-9d27-4d7e-9eb4-333333333333',
-   '11111111-1111-4111-8111-666666666666', 'INVENTARIO_ELEMENTOS',
-   'Material bibliográfico sin devolver: 2 libros de ingeniería de software en la biblioteca central', 'BLOQUEADO', '2026-10-04 11:00:00-05'),
-  ('b2222222-2222-4222-8222-222222222222', 'aaaa1111-1111-4111-8111-111111111111', '6513e4af-9d27-4d7e-9eb4-666666666666',
-   '11111111-1111-4111-8111-999999999999', 'FINANCIERO',
-   'Anticipo pendiente de descuento correspondiente a viáticos del seminario 2026-1', 'BLOQUEADO', '2026-10-04 11:30:00-05'),
-  ('b3333333-3333-4333-8333-333333333333', 'aaaa1111-1111-4111-8111-111111111111', '6513e4af-9d27-4d7e-9eb4-888888888888',
-   '11111111-1111-4111-8111-bbbbbbbbbbbb', 'ACADEMICO_PROFESORAL',
-   'Informes de ejecución académica no entregados (RN-007)', 'BLOQUEADO', '2026-10-05 14:05:00-05')
-ON CONFLICT (id) DO NOTHING;
-
--- 7.2 Carlos Muñoz — Almacén activo, DTI ya resuelto
-INSERT INTO bloqueos_dependencia (
-  id, solicitud_id, dependencia_id, registrado_por_id, categoria, motivo_descripcion, estado, fecha_registro,
-  resuelto_por_id, fecha_resolucion, observacion_resolucion
-) VALUES
-  ('b4444444-4444-4444-8444-444444444444', 'bbbb2222-2222-4222-8222-222222222222', '6513e4af-9d27-4d7e-9eb4-444444444444',
-   '11111111-1111-4111-8111-777777777777', 'INVENTARIO_ELEMENTOS',
-   'Portátil corporativo asignado sin devolver (placa de inventario #44921)', 'BLOQUEADO', '2026-10-03 16:20:00-05',
-   NULL, NULL, NULL),
-  ('b5555555-5555-4555-8555-555555555555', 'bbbb2222-2222-4222-8222-222222222222', '6513e4af-9d27-4d7e-9eb4-222222222222',
-   '11111111-1111-4111-8111-555555555555', 'DOCUMENTAL_ENTREGABLES',
-   'Revisión y desvinculación de cuentas institucionales y software', 'RESUELTO', '2026-10-02 10:00:00-05',
-   '11111111-1111-4111-8111-555555555555', '2026-10-02 11:30:00-05',
-   'Credenciales revocadas y accesos reasignados a la nueva dependencia')
-ON CONFLICT (id) DO NOTHING;
-
--- 7.3 Sofía Cárdenas — historial resuelto, cero bloqueos activos
-INSERT INTO bloqueos_dependencia (
-  id, solicitud_id, dependencia_id, registrado_por_id, categoria, motivo_descripcion, estado, fecha_registro,
-  resuelto_por_id, fecha_resolucion, observacion_resolucion
-) VALUES
-  ('b6666666-6666-4666-8666-666666666666', 'cccc3333-3333-4333-8333-333333333333', '6513e4af-9d27-4d7e-9eb4-444444444444',
-   '11111111-1111-4111-8111-777777777777', 'INVENTARIO_ELEMENTOS',
-   'Verificación de elementos devolutivos de apoyo a la gestión', 'RESUELTO', '2026-10-03 11:00:00-05',
-   '11111111-1111-4111-8111-777777777777', '2026-10-03 15:45:00-05',
-   'Paz y salvo de inventario verificado. No registra activos a cargo.'),
-  ('b7777777-7777-4777-8777-777777777777', 'cccc3333-3333-4333-8333-333333333333', '6513e4af-9d27-4d7e-9eb4-555555555555',
-   '11111111-1111-4111-8111-888888888888', 'DOCUMENTAL_ENTREGABLES',
-   'Verificación de entrega de expedientes contractuales físicos', 'RESUELTO', '2026-10-03 14:00:00-05',
-   '11111111-1111-4111-8111-888888888888', '2026-10-04 09:30:00-05',
-   'Expedientes y carpetas de archivo de gestión recibidos a entera satisfacción.')
-ON CONFLICT (id) DO NOTHING;
-
--- 7.4 Mateo Gómez — historial completo resuelto antes de la aprobación final
--- (DO + IF NOT EXISTS: el trámite ya aprobado rechazaría nuevos bloqueos al re-ejecutar el seed)
+-- 7.1 Laura (docente, retiro): 5 de 8 aprobadas, 3 bloqueos
 DO $seed$
+DECLARE
+  s UUID := 'aaaa1111-1111-4111-8111-111111111111';
+  d TEXT := '6513e4af-9d27-4d7e-9eb4-';
+  u TEXT := '11111111-1111-4111-8111-';
 BEGIN
-IF NOT EXISTS (SELECT 1 FROM bloqueos_dependencia WHERE id = 'b8888888-8888-4888-8888-888888888888') THEN
-INSERT INTO bloqueos_dependencia (
-  id, solicitud_id, dependencia_id, registrado_por_id, categoria, motivo_descripcion, estado, fecha_registro,
-  resuelto_por_id, fecha_resolucion, observacion_resolucion
-) VALUES
-  ('b8888888-8888-4888-8888-888888888888', 'dddd4444-4444-4444-8444-444444444444', '6513e4af-9d27-4d7e-9eb4-222222222222',
-   '11111111-1111-4111-8111-555555555555', 'INVENTARIO_ELEMENTOS',
-   'Portátil institucional y token de acceso pendientes de devolución', 'RESUELTO', '2026-09-16 10:00:00-05',
-   '11111111-1111-4111-8111-555555555555', '2026-09-18 15:20:00-05',
-   'Equipos recibidos y verificados; cuentas desactivadas.'),
-  ('b9999999-9999-4999-8999-999999999999', 'dddd4444-4444-4444-8444-444444444444', '6513e4af-9d27-4d7e-9eb4-666666666666',
-   '11111111-1111-4111-8111-999999999999', 'FINANCIERO',
-   'Libranza vigente pendiente de cancelación', 'RESUELTO', '2026-09-16 11:00:00-05',
-   '11111111-1111-4111-8111-999999999999', '2026-09-22 09:10:00-05',
-   'Libranza cancelada; sin saldos pendientes con la institución.'),
-  ('b0000000-0000-4000-8000-000000000000', 'dddd4444-4444-4444-8444-444444444444', '6513e4af-9d27-4d7e-9eb4-777777777777',
-   '11111111-1111-4111-8111-aaaaaaaaaaaa', 'DOCUMENTAL_ENTREGABLES',
-   'Examen médico ocupacional de retiro sin radicar', 'RESUELTO', '2026-09-17 08:30:00-05',
-   '11111111-1111-4111-8111-aaaaaaaaaaaa', '2026-09-30 16:00:00-05',
-   'Examen médico de retiro radicado y archivado en la historia ocupacional.')
-;
-END IF;
+  IF EXISTS (SELECT 1 FROM revisiones_area WHERE solicitud_id = s) THEN RETURN; END IF;
+
+  PERFORM pg_temp.solicitar(s, (d || '111111111111')::UUID, '2026-10-02 09:00:00-05');
+  PERFORM pg_temp.aprobar(s, (d || '111111111111')::UUID, (u || '444444444444')::UUID, '2026-10-02 10:15:00-05',
+    'Recibí el informe por entrega de cargo, los archivos y los productos elaborados por la docente.');
+
+  PERFORM pg_temp.solicitar(s, (d || '222222222222')::UUID, '2026-10-02 09:00:00-05');
+  PERFORM pg_temp.aprobar(s, (d || '222222222222')::UUID, (u || '555555555555')::UUID, '2026-10-03 09:40:00-05',
+    'Recibí equipo de cómputo y accesos; cuenta institucional restablecida.');
+
+  PERFORM pg_temp.solicitar(s, (d || '333333333333')::UUID, '2026-10-02 09:00:00-05');
+  PERFORM pg_temp.bloquear(s, (d || '333333333333')::UUID, (u || '666666666666')::UUID, '2026-10-04 11:00:00-05',
+    'INVENTARIO_ELEMENTOS', 'Material bibliográfico sin devolver: 2 libros de ingeniería de software en la biblioteca central');
+
+  PERFORM pg_temp.solicitar(s, (d || '444444444444')::UUID, '2026-10-02 09:00:00-05');
+  PERFORM pg_temp.aprobar(s, (d || '444444444444')::UUID, (u || '777777777777')::UUID, '2026-10-03 15:00:00-05',
+    'Recibí los elementos asignados por inventario: llaves de oficina y portátil.');
+
+  PERFORM pg_temp.solicitar(s, (d || '555555555555')::UUID, '2026-10-02 09:00:00-05');
+  PERFORM pg_temp.aprobar(s, (d || '555555555555')::UUID, (u || '888888888888')::UUID, '2026-10-04 10:30:00-05',
+    'Revisé la entrega de expedientes y carpetas a su cargo; el inventario documental coincide.');
+
+  PERFORM pg_temp.solicitar(s, (d || '666666666666')::UUID, '2026-10-02 09:00:00-05');
+  PERFORM pg_temp.bloquear(s, (d || '666666666666')::UUID, (u || '999999999999')::UUID, '2026-10-04 11:30:00-05',
+    'FINANCIERO', 'Anticipo pendiente de descuento correspondiente a viáticos del seminario 2026-1');
+
+  PERFORM pg_temp.solicitar(s, (d || '777777777777')::UUID, '2026-10-02 09:00:00-05',
+    'https://formacion.uniautonoma.edu.co/certificados/laura-ortiz-sst');
+  PERFORM pg_temp.aprobar(s, (d || '777777777777')::UUID, (u || 'aaaaaaaaaaaa')::UUID, '2026-10-05 09:20:00-05',
+    'Examen médico de retiro realizado y certificado de horas validado en el enlace.');
+
+  -- Desarrollo Profesoral: 2 de 3 entregables → bloqueo
+  PERFORM pg_temp.solicitar(s, (d || '888888888888')::UUID, '2026-10-02 09:00:00-05');
+  INSERT INTO entregables_profesorales (solicitud_id, planes_aula_aprobado, innovaciones_educativas_aprobado,
+    informes_ejecucion_aprobado, evaluador_id, fecha_evaluacion, observaciones)
+  VALUES (s, TRUE, TRUE, FALSE, (u || 'bbbbbbbbbbbb')::UUID, '2026-10-05 14:00:00-05',
+    'Planes de aula e innovaciones educativas validados; pendiente el informe de ejecución de tutorías y clubes académicos.');
+  PERFORM pg_temp.bloquear(s, (d || '888888888888')::UUID, (u || 'bbbbbbbbbbbb')::UUID, '2026-10-05 14:05:00-05',
+    'ACADEMICO_PROFESORAL', 'Informes de ejecución académica no entregados (RN-007)');
 END
 $seed$;
 
--- 8. APROBACIÓN FINAL Y CERTIFICADO (RN-002, RN-005, RN-006, RN-010) ---------
--- El trigger valida: rol del aprobador, 0 bloqueos activos e informe completo.
+-- 7.2 Carlos (cambio de dependencia): el bloqueo de TI ya se resolvió; Almacén bloquea; Archivo en revisión
+DO $seed$
+DECLARE
+  s UUID := 'bbbb2222-2222-4222-8222-222222222222';
+  d TEXT := '6513e4af-9d27-4d7e-9eb4-';
+  u TEXT := '11111111-1111-4111-8111-';
+BEGIN
+  IF EXISTS (SELECT 1 FROM revisiones_area WHERE solicitud_id = s) THEN RETURN; END IF;
+
+  PERFORM pg_temp.solicitar(s, (d || '111111111111')::UUID, '2026-10-03 08:30:00-05');
+  PERFORM pg_temp.aprobar(s, (d || '111111111111')::UUID, (u || '444444444444')::UUID, '2026-10-03 09:00:00-05',
+    'Recibí el informe, los archivos y los productos elaborados por el funcionario.');
+
+  PERFORM pg_temp.solicitar(s, (d || '222222222222')::UUID, '2026-10-03 08:30:00-05');
+  PERFORM pg_temp.bloquear(s, (d || '222222222222')::UUID, (u || '555555555555')::UUID, '2026-10-03 10:00:00-05',
+    'DOCUMENTAL_ENTREGABLES', 'Revisión y desvinculación de cuentas institucionales y software');
+  PERFORM pg_temp.resolicitar(s, (d || '222222222222')::UUID);
+  PERFORM pg_temp.aprobar(s, (d || '222222222222')::UUID, (u || '555555555555')::UUID, '2026-10-03 11:30:00-05',
+    'Credenciales revocadas y accesos reasignados a la nueva dependencia.');
+
+  PERFORM pg_temp.solicitar(s, (d || '333333333333')::UUID, '2026-10-03 08:30:00-05');
+  PERFORM pg_temp.aprobar(s, (d || '333333333333')::UUID, (u || '666666666666')::UUID, '2026-10-04 09:10:00-05',
+    'Sin material bibliográfico ni recursos de laboratorio pendientes.');
+
+  PERFORM pg_temp.solicitar(s, (d || '444444444444')::UUID, '2026-10-03 08:30:00-05');
+  PERFORM pg_temp.bloquear(s, (d || '444444444444')::UUID, (u || '777777777777')::UUID, '2026-10-03 16:20:00-05',
+    'INVENTARIO_ELEMENTOS', 'Portátil corporativo asignado sin devolver (placa de inventario #44921)');
+
+  PERFORM pg_temp.solicitar(s, (d || '555555555555')::UUID, '2026-10-05 10:00:00-05');
+  -- Contable (666): todavía sin solicitar
+END
+$seed$;
+
+-- 7.3 Sofía y Mateo (retiro, contratista y administrativo): las 7 dependencias que les aplican
+DO $seed$
+DECLARE
+  d TEXT := '6513e4af-9d27-4d7e-9eb4-';
+  u TEXT := '11111111-1111-4111-8111-';
+  s UUID;
+  base TIMESTAMPTZ;
+  dep TEXT;
+  rev TEXT;
+  notas TEXT[] := ARRAY[
+    'Recibí el informe, los archivos y los productos elaborados.',
+    'Equipos y accesos entregados; cuenta institucional restablecida.',
+    'Sin material bibliográfico ni recursos de laboratorio pendientes.',
+    'Recibí los elementos asignados por inventario; no registra activos a cargo.',
+    'Revisé la entrega de expedientes y carpetas; el inventario documental coincide.',
+    'Revisé contablemente: no presenta saldos ni obligaciones por descontar.',
+    'Examen médico de retiro realizado y certificado de horas validado en el enlace.'];
+  deps TEXT[] := ARRAY['111111111111','222222222222','333333333333','444444444444','555555555555','666666666666','777777777777'];
+  revs TEXT[] := ARRAY['444444444444','555555555555','666666666666','777777777777','888888888888','999999999999','aaaaaaaaaaaa'];
+  i INT;
+BEGIN
+  FOREACH s IN ARRAY ARRAY['cccc3333-3333-4333-8333-333333333333', 'dddd4444-4444-4444-8444-444444444444']::UUID[] LOOP
+    IF EXISTS (SELECT 1 FROM revisiones_area WHERE solicitud_id = s) THEN CONTINUE; END IF;
+    base := CASE WHEN s = 'dddd4444-4444-4444-8444-444444444444'::UUID THEN '2026-09-15 09:00:00-05' ELSE '2026-10-03 11:30:00-05' END;
+    FOR i IN 1..7 LOOP
+      PERFORM pg_temp.solicitar(s, (d || deps[i])::UUID, base,
+        CASE WHEN deps[i] = '777777777777' THEN 'https://formacion.uniautonoma.edu.co/certificados/sst-' || substr(s::TEXT, 1, 4) END);
+      PERFORM pg_temp.aprobar(s, (d || deps[i])::UUID, (u || revs[i])::UUID, base + (i || ' days')::INTERVAL, notas[i]);
+    END LOOP;
+  END LOOP;
+END
+$seed$;
+
+-- 8. SOLICITUD FINAL, APROBACIÓN Y CERTIFICADO ---------------------------------------------------------
+-- Sofía y Mateo aceptan la cláusula, firman y piden la aprobación final (RN-016)
 UPDATE solicitudes_paz_y_salvo
-   SET aprobado_final           = TRUE,
-       aprobador_final_id       = '11111111-1111-4111-8111-cccccccccccc',
-       fecha_aprobacion_final   = '2026-10-09 10:45:00-05',
-       observaciones_aprobacion = 'Trámite verificado. Sin pendientes en ninguna dependencia.'
- WHERE id = 'dddd4444-4444-4444-8444-444444444444'
-   AND NOT aprobado_final;
+   SET observaciones_trabajador = 'Sin observaciones.',
+       clausula_aceptada = TRUE,
+       fecha_clausula = CASE id WHEN 'dddd4444-4444-4444-8444-444444444444' THEN TIMESTAMPTZ '2026-09-22 10:00:00-05'
+                                ELSE TIMESTAMPTZ '2026-10-10 09:00:00-05' END,
+       firma_trabajador = (SELECT imagen FROM firmas_usuario WHERE usuario_id = solicitudes_paz_y_salvo.usuario_id)
+ WHERE id IN ('cccc3333-3333-4333-8333-333333333333', 'dddd4444-4444-4444-8444-444444444444')
+   AND estado_global = 'AL_DIA';
+
+UPDATE solicitudes_paz_y_salvo SET estado_global = 'PENDIENTE_APROBACION'
+ WHERE id IN ('cccc3333-3333-4333-8333-333333333333', 'dddd4444-4444-4444-8444-444444444444')
+   AND estado_global = 'AL_DIA';
+
+-- Comunidad Universitaria aprueba el de Mateo (RN-002, RN-005, RN-010)
+UPDATE solicitudes_paz_y_salvo
+   SET estado_global = 'APROBADO_FINAL',
+       aprobador_final_id = '11111111-1111-4111-8111-cccccccccccc',
+       fecha_aprobacion_final = '2026-10-09 10:45:00-05',
+       observaciones_aprobacion = 'Trámite verificado. Sin pendientes en ninguna dependencia.',
+       firma_aprobador = (SELECT imagen FROM firmas_usuario WHERE usuario_id = '11111111-1111-4111-8111-cccccccccccc')
+ WHERE id = 'dddd4444-4444-4444-8444-444444444444' AND estado_global = 'PENDIENTE_APROBACION';
 
 -- Token de verificación del QR (verificable en /verificar/<token>)
 INSERT INTO certificados_digitales (solicitud_id, token_verificacion, hash_verificacion, archivo_url, emitido_por, fecha_emision) VALUES
