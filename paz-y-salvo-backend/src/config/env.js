@@ -20,8 +20,11 @@ module.exports = {
   },
   JWT: {
     SECRET: process.env.JWT_SECRET,
-    EXPIRES_IN: process.env.JWT_EXPIRES_IN || '24h',
+    EXPIRES_IN: process.env.JWT_EXPIRES_IN || '8h',
   },
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  // Saltos de proxy confiables (0/vacío = sin proxy)
+  TRUST_PROXY: positiveInteger(process.env.TRUST_PROXY, 0),
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   // Dominio de Google Workspace de la universidad (claim `hd` del ID token)
   GOOGLE_HOSTED_DOMAIN: (process.env.GOOGLE_HOSTED_DOMAIN || 'uniautonoma.edu.co').toLowerCase(),

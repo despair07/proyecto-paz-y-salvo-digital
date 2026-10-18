@@ -18,6 +18,12 @@ const args = new Set(process.argv.slice(2));
 const RESET = args.has('--reset');
 const SOLO_MAESTRO = args.has('--solo-maestro');
 
+// --reset borra todas las tablas y el seed demo crea cuentas con contraseña conocida: nunca en producción
+if (process.env.NODE_ENV === 'production' && (RESET || !SOLO_MAESTRO)) {
+  console.error('❌ En producción solo se permite: npm run setup-db -- --solo-maestro (sin --reset ni datos ficticios).');
+  process.exit(1);
+}
+
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT) || 5432,

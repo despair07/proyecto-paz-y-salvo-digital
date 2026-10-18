@@ -4,8 +4,15 @@ const routes = require('./routes');
 const env = require('./config/env');
 const HttpError = require('./utils/httpError');
 const errorHandler = require('./middlewares/errorHandler.middleware');
+const { securityHeaders, rateLimit } = require('./middlewares/security.middleware');
 
 const app = express();
+
+// Detrás de un proxy o balanceador (Render, Railway, Nginx…) indicar cuántos saltos con TRUST_PROXY=1
+// para que el límite de peticiones use la IP real del cliente.
+if (env.TRUST_PROXY) app.set('trust proxy', env.TRUST_PROXY);
+app.disable('x-powered-by');
+app.use(securityHeaders);
 
 app.use(cors({
   origin(origin, callback) {
@@ -17,8 +24,9 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+// El cuerpo más grande es el informe por entrega de cargo (máx. 500 KB) o la firma (máx. 200 KB)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 const swaggerDocument = {
   openapi: '3.0.0',
@@ -201,6 +209,9 @@ app.get('/api/openapi.json', (req, res) => {
   res.json(swaggerDocument);
 });
 
+// Límites por IP: general y, más estricto, el inicio de sesión (fuerza bruta)
+app.use('/api/v1/auth/login', rateLimit({ windowMs: 10 * 60 * 1000, max: 30, mensaje: 'Demasiados intentos de inicio de sesión. Intente de nuevo en unos minutos.' }));
+app.use('/api/v1', rateLimit({ windowMs: 60 * 1000, max: 300 }));
 app.use('/api/v1', routes);
 
 app.use(errorHandler);

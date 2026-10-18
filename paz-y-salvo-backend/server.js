@@ -1,6 +1,17 @@
 const app = require('./src/app');
 const env = require('./src/config/env');
 const database = require('./src/config/database');
+const { problemasDeProduccion } = require('./src/config/validateEnv');
+
+// En producción no se arranca con una configuración insegura o incompleta
+if (env.NODE_ENV === 'production') {
+  const problemas = problemasDeProduccion(env);
+  if (problemas.length) {
+    console.error('❌ Configuración de producción no válida:');
+    problemas.forEach((p) => console.error(`   · `));
+    process.exit(1);
+  }
+}
 
 const REQUIRED_TABLES = [
   'roles', 'usuarios', 'usuario_roles', 'dependencias', 'encargados_dependencia',
