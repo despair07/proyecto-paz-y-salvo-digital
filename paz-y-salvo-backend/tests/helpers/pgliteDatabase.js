@@ -15,7 +15,7 @@ let pg = null;
 let loading = null;
 
 async function load() {
-  pg = new PGlite();
+  pg = new PGlite({ parsers: { 1082: (value) => value } }); // DATE como texto, igual que en database.js
   for (const file of FILES) {
     await pg.exec(fs.readFileSync(path.join(SQL_DIR, file), 'utf8'));
   }

@@ -27,7 +27,7 @@ async function generateCertificate(certificate, verificationUrl) {
   page.drawLine({ start: { x: 54, y: 630 }, end: { x: 558, y: 630 }, thickness: 1, color: rgb(0.82, 0.85, 0.9) });
 
   draw('Se certifica que', 54, 592, 12, regular, gray);
-  draw(`${certificate.nombres} ${certificate.apellidos}`, 54, 562, 20, bold);
+  draw(certificate.nombre_completo || `${certificate.nombres} ${certificate.apellidos}`, 54, 562, 20, bold);
   draw(`${certificate.tipo_documento || 'Documento'}: ${certificate.numero_documento}`, 54, 536, 12);
   draw(`Vinculacion: ${certificate.tipo_vinculacion}`, 54, 510, 12);
   draw(`Cargo: ${certificate.cargo_desempenado}`, 54, 484, 12);

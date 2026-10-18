@@ -139,6 +139,8 @@ class AuthService {
       });
       payload = ticket.getPayload();
     } catch (err) {
+      // Motivo real en el log del servidor (audiencia distinta, token vencido, sin red hacia Google…)
+      console.warn('[auth] Google rechazó el token:', err.message);
       throw new HttpError(401, 'Token de Google inválido o expirado');
     }
 
@@ -149,6 +151,7 @@ class AuthService {
     // `hd` solo viene en cuentas de Google Workspace del dominio; un correo @uniautonoma.edu.co
     // verificado en una cuenta personal de Google no lo trae.
     if (payload.hd !== env.GOOGLE_HOSTED_DOMAIN || !email.endsWith(`@${env.GOOGLE_HOSTED_DOMAIN}`)) {
+      console.warn(`[auth] Ingreso rechazado: dominio ${email.split('@')[1]} y claim hd=${payload.hd || 'ausente'}`);
       throw new HttpError(401, RESTRICTED_ACCESS);
     }
     return { ...payload, email };

@@ -10,6 +10,8 @@ const usuariosRoutes = require('./usuarios.routes');
 const cargosRoutes = require('./cargos.routes');
 const periodosRoutes = require('./periodos.routes');
 const notificacionesRoutes = require('./notificaciones.routes');
+const revisionesRoutes = require('./revisiones.routes');
+const firmaRoutes = require('./firma.routes');
 
 const router = express.Router();
 
@@ -24,6 +26,8 @@ router.use('/usuarios', usuariosRoutes);
 router.use('/cargos', cargosRoutes);
 router.use('/periodos', periodosRoutes);
 router.use('/notificaciones', notificacionesRoutes);
+router.use('/revisiones', revisionesRoutes);
+router.use('/firma', firmaRoutes);
 
 // Alias de retrocompatibilidad
 router.use('/requests', tramitesRoutes);

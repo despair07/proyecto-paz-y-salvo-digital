@@ -1,17 +1,15 @@
 // ============================================================================
 // SERVICIO DE DESARROLLO PROFESORAL (RN-007, RF-008)
-// El Centro de Desarrollo Profesoral evalúa los 3 entregables del docente. Al aprobar los tres
-// se levanta su bloqueo; si falta alguno se mantiene o se registra un bloqueo (RN-001 lo propaga).
+// El Centro de Desarrollo Profesoral evalúa los 3 entregables del docente mientras revisa su
+// solicitud. Es una sola persona que revisa las tres filas de la sección 4 del formato: aquí marca
+// cuáles aprobó; luego aprueba la solicitud (solo si las tres están aprobadas) o la bloquea.
 // ============================================================================
 
 const database = require('../config/database');
 const requestRepository = require('../repositories/request.repository');
-const lockRepository = require('../repositories/lock.repository');
-const { ROLES, SOLICITANTES, hasRole } = require('../utils/roles');
+const requestService = require('./request.service');
+const { ROLES, hasRole } = require('../utils/roles');
 const HttpError = require('../utils/httpError');
-
-const PENDING_REASON = 'Pendiente entrega o corrección de entregables docentes (RN-007)';
-const APPROVED_REASON = 'Los 3 entregables docentes fueron aprobados a satisfacción (RN-007)';
 
 function toResponse(solicitudId, ep) {
   return {
@@ -30,10 +28,7 @@ class TeacherService {
     return database.withClient(async (client) => {
       const solicitud = await requestRepository.findByIdOrUser(client, docenteOrSolicitudId);
       if (!solicitud) throw new HttpError(404, 'Solicitud docente no encontrada');
-
-      if (hasRole(currentUser.roles, SOLICITANTES) && solicitud.usuario_id !== currentUser.id) {
-        throw new HttpError(403, 'Solo puede consultar sus propios entregables');
-      }
+      await requestService.assertCanRead(client, solicitud, currentUser);
 
       const ep = await requestRepository.findEntregables(client, solicitud.id);
       return toResponse(solicitud.id, ep);
@@ -65,11 +60,15 @@ class TeacherService {
 
       const solicitud = await requestRepository.findByIdOrUser(client, docenteOrSolicitudId);
       if (!solicitud) throw new HttpError(404, 'Solicitud docente no encontrada');
+      if (solicitud.usuario_id === currentUser.id) {
+        throw new HttpError(403, 'RN-013: no puede evaluar sus propios entregables');
+      }
       if (solicitud.tipo_vinculacion !== 'Docente') {
         throw new HttpError(409, 'RN-007: los entregables profesorales aplican solo a personal docente');
       }
-      if (['APROBADO_FINAL', 'RECHAZADO'].includes(solicitud.estado_global)) {
-        throw new HttpError(409, 'El trámite ya está cerrado y los entregables no se pueden modificar');
+      const revision = await requestRepository.findRevision(client, solicitud.id, profesoral.id);
+      if (!revision || revision.estado !== 'SOLICITADA') {
+        throw new HttpError(409, 'El docente aún no ha solicitado la revisión de Desarrollo Profesoral o ya fue resuelta');
       }
 
       const ep = await requestRepository.upsertEntregables(client, {
@@ -81,28 +80,11 @@ class TeacherService {
         observaciones: typeof observaciones === 'string' ? observaciones.trim() : null,
       });
 
-      const active = await lockRepository.findActiveByArea(client, solicitud.id, profesoral.id);
-      if (ep.completo && active) {
-        await lockRepository.resolve(client, {
-          id: active.id,
-          resueltoPorId: currentUser.id,
-          observacion: APPROVED_REASON,
-        });
-      } else if (!ep.completo && !active) {
-        await lockRepository.create(client, {
-          solicitudId: solicitud.id,
-          dependenciaId: profesoral.id,
-          registradoPorId: currentUser.id,
-          categoria: 'ACADEMICO_PROFESORAL',
-          motivo: PENDING_REASON,
-        });
-      }
-
       return {
         ok: true,
         mensaje: ep.completo
-          ? 'Los 3 entregables fueron aprobados: área en Paz y Salvo'
-          : 'Entregables actualizados. Área permanece con pendientes (RN-007)',
+          ? 'Los 3 entregables están aprobados: ya puedes aprobar la solicitud'
+          : 'Entregables actualizados. Para aprobar deben estar los 3 aprobados; de lo contrario, bloquea la solicitud (RN-007)',
         data: toResponse(solicitud.id, ep),
       };
     });

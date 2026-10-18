@@ -175,25 +175,23 @@ describe('Tipo de vinculación (RN-012)', () => {
     expect(res.body.mensaje).toMatch(/confirmar/);
   });
 
-  it('con trámite en curso no se puede cambiar', async () => {
-    const habilitar = await request(app).post(`${API}/tramites/habilitar`).set(auth(token))
-      .send({ tipo_novedad: 'RETIRO', cargo_desempenado: 'Docente de Cátedra' });
-    expect(habilitar.status).toBe(201);
-
-    const res = await request(app).put(`${API}/auth/tipo-vinculacion`).set(auth(token))
+  it('con un trámite en curso no se puede cambiar (RN-012)', async () => {
+    google({ email: 'laura.ortiz@uniautonoma.edu.co', sub: 'sub-laura', given_name: 'Laura', family_name: 'Ortiz' });
+    const laura = (await loginGoogle()).body.token;
+    const res = await request(app).put(`${API}/auth/tipo-vinculacion`).set(auth(laura))
       .send({ tipo: 'Administrativo', confirmar: true });
     expect(res.status).toBe(409);
     expect(res.body.mensaje).toMatch(/RN-012/);
-    const me = await request(app).get(`${API}/auth/me`).set(auth(token));
+    const me = await request(app).get(`${API}/auth/me`).set(auth(laura));
     expect(me.body.usuario.tipo_vinculacion).toBe('Docente');
   });
 
-  it('sin trámite abierto el cambio se hace, reemplaza el rol y notifica a la persona y a TI', async () => {
-    await db.query(
-      `UPDATE solicitudes_paz_y_salvo SET estado_global = 'RECHAZADO', etapa_actual = 'FINALIZADO',
-              observaciones_aprobacion = 'Prueba'
-        WHERE usuario_id = (SELECT id FROM usuarios WHERE correo_institucional = 'luis.mora@uniautonoma.edu.co')`
-    );
+  it('con el trámite en borrador sí se puede: reemplaza el rol y notifica a la persona y a TI', async () => {
+    const habilitar = await request(app).post(`${API}/tramites/habilitar`).set(auth(token))
+      .send({ tipo_novedad: 'RETIRO' });
+    expect(habilitar.status).toBe(201);
+    expect(habilitar.body.solicitud.estado_global).toBe('BORRADOR');
+
     const res = await request(app).put(`${API}/auth/tipo-vinculacion`).set(auth(token))
       .send({ tipo: 'Administrativo', confirmar: true });
     expect(res.status).toBe(200);

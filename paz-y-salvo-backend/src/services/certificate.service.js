@@ -65,7 +65,7 @@ class CertificateService {
       valido: true,
       estado: 'AUTÉNTICO Y VIGENTE',
       token,
-      solicitante: `${cert.nombres} ${cert.apellidos}`,
+      solicitante: cert.nombre_completo || `${cert.nombres} ${cert.apellidos}`,
       documento: `${cert.tipo_documento} ${cert.numero_documento}`,
       tipoVinculacion: cert.tipo_vinculacion,
       cargo: cert.cargo_desempenado,

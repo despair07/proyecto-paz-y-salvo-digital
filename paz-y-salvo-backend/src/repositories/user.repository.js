@@ -153,8 +153,58 @@ async function setTipoVinculacion(client, id, tipo) {
   );
 }
 
+// Jefes inmediatos que el trabajador puede elegir: los registra TI con el rol y la dependencia
+const JEFES_FROM = `
+  FROM usuarios u
+  WHERE u.estado = 'ACTIVO'
+    AND EXISTS (SELECT 1 FROM usuario_roles ur JOIN roles r ON r.id = ur.rol_id
+                 WHERE ur.usuario_id = u.id AND r.nombre_rol = 'Jefe Inmediato')
+    AND EXISTS (SELECT 1 FROM encargados_dependencia e JOIN dependencias d ON d.id = e.dependencia_id
+                 WHERE e.usuario_id = u.id AND d.etapa = 1)`;
+
+async function listJefes(client, { excluirId } = {}) {
+  const { rows } = await client.query(
+    `SELECT u.id, u.nombres || ' ' || u.apellidos AS nombre, u.cargo, u.correo_institucional ${JEFES_FROM}
+        AND u.id IS DISTINCT FROM $1::uuid
+      ORDER BY u.apellidos, u.nombres`,
+    [excluirId || null]
+  );
+  return rows;
+}
+
+async function isJefeValido(client, id) {
+  const { rows } = await client.query(`SELECT 1 ${JEFES_FROM} AND u.id = $1::uuid`, [id]);
+  return rows.length > 0;
+}
+
+// Firma dibujada de la persona (PNG en data URL)
+async function getFirma(client, usuarioId) {
+  const { rows } = await client.query(
+    'SELECT imagen, updated_at FROM firmas_usuario WHERE usuario_id = $1',
+    [usuarioId]
+  );
+  return rows[0] || null;
+}
+
+async function upsertFirma(client, usuarioId, imagen) {
+  await client.query(
+    `INSERT INTO firmas_usuario (usuario_id, imagen) VALUES ($1, $2)
+     ON CONFLICT (usuario_id) DO UPDATE SET imagen = EXCLUDED.imagen`,
+    [usuarioId, imagen]
+  );
+}
+
+async function deleteFirma(client, usuarioId) {
+  await client.query('DELETE FROM firmas_usuario WHERE usuario_id = $1', [usuarioId]);
+}
+
 module.exports = {
   WORKER_ROLES,
+  listJefes,
+  isJefeValido,
+  getFirma,
+  upsertFirma,
+  deleteFirma,
   findByEmail,
   findById,
   listAssignedDependencyIds,
