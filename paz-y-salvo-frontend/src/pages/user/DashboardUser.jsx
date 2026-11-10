@@ -66,7 +66,6 @@ const DashboardUser = () => {
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
   const [paso, setPaso] = useState('datos');
-  const [novedad, setNovedad] = useState('RETIRO');
   const [iniciando, setIniciando] = useState(false);
   const pasoElegido = useRef(false);
 
@@ -103,7 +102,7 @@ const DashboardUser = () => {
   const iniciar = async () => {
     setIniciando(true);
     try {
-      await habilitarTramite({ tipo_novedad: novedad });
+      await habilitarTramite();
       pasoElegido.current = false;
       await recargar();
     } catch (err) {
@@ -149,24 +148,8 @@ const DashboardUser = () => {
             <h2 className="text-xl font-bold text-[#0A2540]">Inicia tu paz y salvo</h2>
             <p className="mt-2 text-sm text-slate-600">
               Es el trámite del formato GTH-07 de la Corporación Universitaria Autónoma del Cauca. Lo harás paso a paso: tus datos
-              generales, la aprobación de tu jefe y de cada área, el informe por entrega de cargo y tu firma.
+              generales (donde indicas si es retiro o cambio de dependencia), la aprobación de tu jefe y de cada área, el informe por entrega de cargo y tu firma.
             </p>
-            <fieldset className="mt-5">
-              <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-700">Tipo de novedad</legend>
-              <div className="flex flex-wrap gap-3">
-                {[['RETIRO', 'Retiro'], ['CAMBIO_DEPENDENCIA', 'Cambio de dependencia']].map(([valor, texto]) => (
-                  <label
-                    key={valor}
-                    className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold ${
-                      novedad === valor ? 'border-[#0A2540] bg-slate-50 text-[#0A2540]' : 'border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    <input type="radio" name="novedad-inicial" value={valor} checked={novedad === valor} onChange={() => setNovedad(valor)} className="h-4 w-4" />
-                    {texto}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
             <button
               type="button"
               onClick={iniciar}

@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "node dev.js",
     "test": "npm --prefix paz-y-salvo-backend test",
-    "build": "npm --prefix paz-y-salvo-frontend run build"
+    "build": "npm --prefix paz-y-salvo-frontend run build",
+    "reset-demo": "npm --prefix paz-y-salvo-backend run setup-db -- --reset",
+    "demo": "npm run reset-demo && node dev.js --liberar"
   }
 }

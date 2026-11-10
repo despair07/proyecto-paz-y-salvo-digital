@@ -8,6 +8,19 @@ types.setTypeParser(1082, (value) => value);
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// pg no admite dos consultas a la vez sobre un mismo cliente (deprecado): se encadenan en orden,
+// así Promise.all sobre un cliente es seguro.
+function serializar(client) {
+  const original = client.query.bind(client);
+  let cola = Promise.resolve();
+  client.query = (...args) => {
+    const resultado = cola.then(() => original(...args));
+    cola = resultado.catch(() => {});
+    return resultado;
+  };
+  return client;
+}
+
 class Database {
   constructor() {
     this.isOnline = false;
@@ -48,7 +61,7 @@ class Database {
     if (typeof operation !== 'function') {
       throw new TypeError('La operación de base de datos no es válida');
     }
-    const client = await this.pool.connect();
+    const client = serializar(await this.pool.connect());
     try {
       return await operation(client);
     } finally {
@@ -62,7 +75,7 @@ class Database {
     if (typeof operation !== 'function') {
       throw new TypeError('La operación de base de datos no es válida');
     }
-    const client = await this.pool.connect();
+    const client = serializar(await this.pool.connect());
     try {
       await client.query('BEGIN');
       await client.query("SELECT set_config('app.audit_reason', $1, true)", [String(auditReason || 'Sistema')]);
@@ -92,7 +105,7 @@ class Database {
       throw new TypeError('La operación de base de datos no es válida');
     }
 
-    const client = await this.pool.connect();
+    const client = serializar(await this.pool.connect());
     let transactionStarted = false;
     try {
       await client.query('BEGIN');
